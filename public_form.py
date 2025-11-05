@@ -1,12 +1,9 @@
 # public_form.py
 import os
-import json
 from datetime import datetime
 import streamlit as st
 from supabase import create_client
 from i18n import t, LANGS  # your i18n.py
-
-from streamlit.components.v1 import html as comp_html  # for browser language sniff
 
 # ---------------------------------------------------------------------
 # Page config (collapsed sidebar is nicer on phones)
@@ -70,62 +67,16 @@ def try_insert_with_pin(table_payload: dict, pin_value: str):
         raise
 
 # ---------------------------------------------------------------------
-# Browser language auto-detect via URL param (?lang=xx)
-# ---------------------------------------------------------------------
-def ensure_lang_query_param():
-    # Read query params
-    try:
-        params = st.experimental_get_query_params()
-    except Exception:
-        params = {}
-    supported = list(LANGS.keys())
-
-    # If no lang in URL, sniff from browser and set it once
-    if "lang" not in params:
-        comp_html(f"""
-        <script>
-          const supported = {json.dumps(supported)};
-          const url = new URL(window.location.href);
-          if (!url.searchParams.get('lang')) {{
-            const nav = (navigator.languages && navigator.languages.length ? navigator.languages[0] : navigator.language) || 'en';
-            const code = (nav || 'en').slice(0,2).toLowerCase();
-            const pick = supported.includes(code) ? code : 'en';
-            url.searchParams.set('lang', pick);
-            window.location.replace(url.toString());  // one-time redirect to set ?lang
-          }}
-        </script>
-        """, height=0)
-        st.stop()  # wait for reload after setting ?lang
-
-    # If lang present, validate; else fall back to 'en'
-    raw = params.get("lang", ["en"])
-    chosen = raw[0] if isinstance(raw, list) else raw
-    if chosen not in supported:
-        chosen = "en"
-        try:
-            st.experimental_set_query_params(lang=chosen)
-        except Exception:
-            pass
-    return chosen
-
-default_lang = ensure_lang_query_param()
-
-# ---------------------------------------------------------------------
 # Language picker + title + note
 # ---------------------------------------------------------------------
 lang = st.selectbox(
     "🌍 Choose your language / Wählen Sie Ihre Sprache",
     options=list(LANGS.keys()),
-    index=list(LANGS.keys()).index(default_lang),
+    index=list(LANGS.keys()).index("en") if "en" in LANGS else 0,
     format_func=lambda k: k
 )
-# Keep URL in sync with selection so it persists on refresh
-try:
-    st.experimental_set_query_params(lang=lang)
-except Exception:
-    pass
-
 t.set_lang(lang)
+
 st.title(t("title"))
 st.info(t("seat_note"))  # localized note under the title
 
