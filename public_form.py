@@ -3,98 +3,188 @@ import os
 from datetime import datetime
 import streamlit as st
 from supabase import create_client
-from i18n import t, LANGS
+from i18n import t, LANGS  # your i18n.py
 
+# ---------------------------------------------------------------------
+# Page config (collapsed sidebar is nicer on phones)
+# ---------------------------------------------------------------------
 st.set_page_config(
     page_title="Immer Miau – Submit",
     page_icon="🐾",
-    layout="centered"
+    layout="centered",
+    initial_sidebar_state="collapsed",
 )
 
-# Supabase (values come from Streamlit Secrets / env)
-SUPABASE_URL = os.environ["SUPABASE_URL"]
-SUPABASE_ANON_KEY = os.environ["SUPABASE_ANON_KEY"]
+# ---------------------------------------------------------------------
+# Supabase client
+# ---------------------------------------------------------------------
+SUPABASE_URL = os.getenv("SUPABASE_URL", st.secrets.get("SUPABASE_URL", ""))
+SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", st.secrets.get("SUPABASE_ANON_KEY", ""))
 sb = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
 
+# Canonical DB values for seat color
 SEAT_OPTIONS = ["White", "Blue", "Pink"]
 
-# Language selector
+# ---------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------
+def valid_pin(pin: str) -> bool:
+    return bool(pin) and pin.isdigit() and 4 <= len(pin) <= 6
+
+def now_iso() -> str:
+    return datetime.utcnow().isoformat()
+
+def try_update_with_pin(table_payload: dict, player_name: str, pin_value: str):
+    """
+    Prefer new column 'edit_pin'. If it doesn't exist on this table, fall back to legacy 'edit_code'.
+    """
+    # Attempt with edit_pin
+    try:
+        sb.table("players").update(table_payload).eq("player_name", player_name).eq("edit_pin", pin_value).execute()
+        return True
+    except Exception as e1:
+        msg = str(e1)
+        if "column edit_pin" in msg or "edit_pin" in msg and "does not exist" in msg:
+            # fall back to edit_code
+            sb.table("players").update(table_payload).eq("player_name", player_name).eq("edit_code", pin_value).execute()
+            return True
+        # re-raise if it's not a column-name issue
+        raise
+
+def try_insert_with_pin(table_payload: dict, pin_value: str):
+    """
+    Prefer new column 'edit_pin'. Fall back to legacy 'edit_code' if needed.
+    """
+    # First try with edit_pin
+    payload = dict(table_payload)
+    payload["edit_pin"] = pin_value
+    try:
+        sb.table("players").insert(payload).execute()
+        return True
+    except Exception as e1:
+        msg = str(e1)
+        if "column edit_pin" in msg or "edit_pin" in msg and "does not exist" in msg:
+            # try with edit_code instead
+            payload = dict(table_payload)
+            payload["edit_code"] = pin_value
+            sb.table("players").insert(payload).execute()
+            return True
+        raise
+
+# ---------------------------------------------------------------------
+# Language picker + title + note
+# ---------------------------------------------------------------------
 lang = st.selectbox(
     "🌍 Choose your language / Wählen Sie Ihre Sprache",
-    options=list(LANGS.keys())
+    options=list(LANGS.keys()),
+    index=list(LANGS.keys()).index("en") if "en" in LANGS else 0,
+    format_func=lambda k: k
 )
 t.set_lang(lang)
 
 st.title(t("title"))
+# Localized note under the title
+st.info(t("seat_note"))
 
-def _is_valid_pin(pin: str) -> bool:
-    return pin.isdigit() and 4 <= len(pin) <= 6
+# Optional: Mobile layout toggle (compact styles, full-width button)
+mobile = st.toggle("Mobile layout", value=False, help="Optimized layout for phones")
 
-with st.form("player_form"):
+if mobile:
+    st.markdown("""
+    <style>
+      /* tighter inputs and labels on phones */
+      .stTextInput input, .stNumberInput input, .stSelectbox select {
+        font-size: 0.95rem;
+      }
+      .stButton > button { width: 100%; }
+    </style>
+    """, unsafe_allow_html=True)
+
+# ---------------------------------------------------------------------
+# Form
+# ---------------------------------------------------------------------
+with st.form("player_form", clear_on_submit=False):
     player_name = st.text_input(t("player_name"))
     alliance = st.text_input(t("current_alliance"))
-    total_power = st.number_input(f"{t('total_power')} (Enter whole number)", min_value=0, step=1)
-    combat_power = st.number_input(f"{t('combat_power')} (Enter whole number)", min_value=0, step=1)
-    seat_color = st.selectbox(t("seat_color"), SEAT_OPTIONS)
 
-    st.markdown("")
+    # Number inputs + localized hint
+    total_power = st.number_input(f"{t('total_power')} ({t('whole_hint')})", min_value=0, step=1)
+    combat_power = st.number_input(f"{t('combat_power')} ({t('whole_hint')})", min_value=0, step=1)
 
-    # Update mode using a PIN (edit_code)
+    # Seat color: blank by default, optional (we only send if a value is chosen)
+    seat_options_with_blank = [""] + SEAT_OPTIONS
+    seat_color = st.selectbox(
+        t("seat_color"),
+        options=seat_options_with_blank,
+        index=0,
+        format_func=lambda v: "" if v == "" else v,
+        help=t("seat_note"),
+    )
+
+    st.markdown("---")
+
+    # Update vs new
     update_mode = st.checkbox("Update an existing entry?")
-    create_pin = ""
-    edit_pin = ""
     if update_mode:
-        edit_pin = st.text_input("Enter your PIN (4–6 digits)", type="password", max_chars=6)
+        pin_update = st.text_input("Enter your PIN (4–6 digits)", type="password", max_chars=6)
+        pin_create = ""
     else:
-        create_pin = st.text_input("Choose a PIN (4–6 digits) — you’ll use this to edit later", type="password", max_chars=6)
+        pin_create = st.text_input("Choose a PIN (4–6 digits)", type="password", max_chars=6)
+        pin_update = ""
 
-    submit_button = st.form_submit_button(t("submit"))
+    submitted = st.form_submit_button(t("submit"), use_container_width=mobile)
 
-    if submit_button:
-        if not player_name or not alliance:
-            st.warning(t("warning"))
-        else:
-            try:
-                if update_mode:
-                    if not _is_valid_pin(edit_pin):
-                        st.warning("Please enter a valid 4–6 digit PIN to update.")
-                    else:
-                        payload = {
-                            "player_name": player_name.strip(),
-                            "current_alliance": alliance.strip(),
-                            "total_hero_power": int(total_power),
-                            "combat_power_1st_squad": int(combat_power),
-                            "expected_transfer_seat_color": seat_color,
-                            "updated_at": datetime.utcnow().isoformat(),
-                            "edit_code": edit_pin.strip(),
-                        }
-                        # RLS will only allow this if the PIN matches the row for this player_name
-                        sb.table("players").update(payload).eq("player_name", payload["player_name"]).execute()
-                        st.success("✅ Updated successfully.")
+# ---------------------------------------------------------------------
+# Handle submit
+# ---------------------------------------------------------------------
+if submitted:
+    if not player_name or not alliance:
+        st.warning(t("warning"))
+    else:
+        try:
+            if update_mode:
+                if not valid_pin(pin_update):
+                    st.warning("Please enter a valid 4–6 digit PIN to update.")
                 else:
-                    if not _is_valid_pin(create_pin):
-                        st.warning("Please choose a valid 4–6 digit PIN (numbers only).")
-                    else:
-                        payload = {
-                            "player_name": player_name.strip(),
-                            "current_alliance": alliance.strip(),
-                            "total_hero_power": int(total_power),
-                            "combat_power_1st_squad": int(combat_power),
-                            "expected_transfer_seat_color": seat_color,
-                            "created_at": datetime.utcnow().isoformat(),
-                            "updated_at": datetime.utcnow().isoformat(),
-                            "edit_code": create_pin.strip(),
-                        }
-                        sb.table("players").insert(payload).execute()
-                        st.success("✅ Submission successful! Keep your PIN — you’ll need it to edit.")
-                        st.info("🔐 Your PIN is the number you just chose. If you forget it, ask an editor to reset it.")
-            except Exception as e:
-                msg = str(e)
-                # Friendly duplicate-name message (unique constraint violation)
-                if "duplicate key value" in msg or "23505" in msg:
-                    st.warning("That player name already exists — please use Update mode and enter your PIN.")
-                # PIN mismatch during update typically surfaces as an RLS violation
-                elif "violates row-level security" in msg or "42501" in msg:
-                    st.warning("Update blocked. The PIN is incorrect or the player name was not found.")
+                    # Build update payload — only include seat color if chosen
+                    payload = {
+                        "player_name": player_name.strip(),
+                        "current_alliance": alliance.strip(),
+                        "total_hero_power": int(total_power),
+                        "combat_power_1st_squad": int(combat_power),
+                        "updated_at": now_iso(),
+                    }
+                    if seat_color:
+                        payload["expected_transfer_seat_color"] = seat_color
+
+                    try_update_with_pin(payload, player_name.strip(), pin_update.strip())
+                    st.success(t("success"))
+
+            else:
+                if not valid_pin(pin_create):
+                    st.warning("Please choose a valid 4–6 digit PIN (numbers only).")
                 else:
-                    st.error(f"{t('error')}: {msg}")
+                    payload = {
+                        "player_name": player_name.strip(),
+                        "current_alliance": alliance.strip(),
+                        "total_hero_power": int(total_power),
+                        "combat_power_1st_squad": int(combat_power),
+                        "created_at": now_iso(),
+                        "updated_at": now_iso(),
+                    }
+                    if seat_color:
+                        payload["expected_transfer_seat_color"] = seat_color
+
+                    try_insert_with_pin(payload, pin_create.strip())
+                    st.success(t("success"))
+
+        except Exception as e:
+            msg = str(e)
+            # Friendly duplicate-name message (unique constraint violation)
+            if "duplicate key value" in msg or "23505" in msg:
+                st.warning("That player name already exists — switch to Update mode and enter your PIN.")
+            # RLS or wrong PIN typically shows as permission/row security errors
+            elif "violates row-level security" in msg or "permission denied" in msg or "42501" in msg:
+                st.warning("Update blocked. Wrong PIN or player not found.")
+            else:
+                st.error(f"{t('error')} {msg}")
