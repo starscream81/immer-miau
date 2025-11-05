@@ -1,6 +1,6 @@
 """
-Immer Miau — Admin Dashboard (Streamlit)
-----------------------------------------
+Immer Miau — Dashboard (Streamlit)
+----------------------------------
 
 What this file does
 - Language toggle (English, Deutsch) for all UI text and column headers
@@ -23,7 +23,7 @@ Environment / secrets required
   SUPABASE_ANON_KEY  (or SERVICE_ROLE for server use; anon is OK with proper RLS)
 
 Run
-  streamlit run admin_dashboard.py
+  streamlit run dashboard.py
 """
 
 import io
@@ -38,7 +38,7 @@ from supabase import Client, create_client
 # -------------
 # Config
 # -------------
-st.set_page_config(page_title="Immer Miau — Admin Dashboard", page_icon="🛠️", layout="wide")
+st.set_page_config(page_title="Immer Miau — Dashboard", page_icon="🛠️", layout="wide")
 
 SUPABASE_URL = os.getenv("SUPABASE_URL", st.secrets.get("SUPABASE_URL", ""))
 SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", st.secrets.get("SUPABASE_ANON_KEY", ""))
@@ -57,7 +57,7 @@ sb = get_client()
 LANGS: Dict[str, str] = {"en": "English", "de": "Deutsch"}
 UI = {
     "en": {
-        "title": "Immer Miau — Admin Dashboard",
+        "title": "Immer Miau — Dashboard",
         "filter_panel": "Filter & Sorting",
         "filter_alliance": "Filter by current alliance (contains)",
         "seat_color": "Seat color",
@@ -85,7 +85,7 @@ UI = {
         "error_no_player": "No players found.",
     },
     "de": {
-        "title": "Immer Miau – Admin Dashboard",
+        "title": "Immer Miau – Dashboard",
         "filter_panel": "Filter & Sortierung",
         "filter_alliance": "Nach aktueller Allianz filtern (enthält)",
         "seat_color": "Sitzfarbe",
@@ -210,14 +210,12 @@ else:
 # -------------
 # Display table (translate headers and enum values, NOT player_name)
 # -------------
-# display copy for value translation
 _df = df.copy()
 if "expected_transfer_seat_color" in _df.columns:
     _df["expected_transfer_seat_color"] = (
         _df["expected_transfer_seat_color"].map(SEAT_COLOR.get(lang, {})).fillna(_df["expected_transfer_seat_color"])
     )
 
-# header map (player_name stays literal)
 cols_map = {
     "player_name": t("col_player_name", lang),
     "current_alliance": t("col_current_alliance", lang),
@@ -244,11 +242,9 @@ st.download_button(label=t("download_csv", lang), data=csv, file_name="players_f
 st.markdown("---")
 st.subheader(t("admin_tools", lang))
 
-# player select uses RAW player_name values; we keep id for update
 players_for_select: List[Dict] = df[["id", "player_name"]].to_dict("records") if not df.empty else []
 
 if players_for_select:
-    # Keep stable order by player_name display
     players_for_select = sorted(players_for_select, key=lambda r: (r["player_name"] or "").lower())
     names = [r["player_name"] for r in players_for_select]
     idx = st.selectbox(t("select_player", lang), options=range(len(names)), format_func=lambda i: names[i] if i is not None else "")
