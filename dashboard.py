@@ -3,18 +3,18 @@ Immer Miau — Dashboard (Streamlit) — Roster + Seats Summary + CET + Fix B
 --------------------------------------------------------------------------
 - Language toggle (English/Deutsch)
 - Seats summary above the roster (total + counts by seat color from the filtered table)
-- Styled roster table with XX.XX M formatting, optional gradient if matplotlib is present
-- CET time display (dd.mm.yyyy HHMM)
+- Roster table shows 20 rows with scroll, frozen headers, and no index column
+- XX.XX M number formatting, CET time display (dd.mm.yyyy HHMM)
 - Admin Tools in sidebar expander
 - Updates by player_name (no id)
 """
 
-import io
 import os
 from typing import Dict, List
+
 import pandas as pd
 import streamlit as st
-from supabase import create_client, Client
+from supabase import Client, create_client
 
 # ------------------------------------------------------------------------------
 # Config
@@ -128,7 +128,6 @@ def t(key: str, lang: str) -> str:
 # ------------------------------------------------------------------------------
 # Language selector
 # ------------------------------------------------------------------------------
-
 def lang_selector() -> str:
     default = st.session_state.get("lang", "de")
     lang = st.sidebar.selectbox(
@@ -168,7 +167,6 @@ def fetch_players() -> pd.DataFrame:
 # Header
 # ------------------------------------------------------------------------------
 st.title("🐱 " + t("title", lang))
-
 st.sidebar.header("🧭 " + t("filter_panel", lang))
 
 # Filters
@@ -180,7 +178,6 @@ sort_key = st.sidebar.selectbox(t("sort_by", lang), options=[k for k, _ in SORT_
 ascending = st.sidebar.checkbox(t("ascending", lang), value=False)
 
 df = fetch_players()
-
 total_records = len(df)
 
 # Apply filters (affects seats summary and roster)
@@ -198,10 +195,8 @@ else:
 # Seats Summary (based on filtered df)
 # ------------------------------------------------------------------------------
 st.subheader(t("section_seats", lang))
-
 seats_total = len(df)
 color_counts = df["expected_transfer_seat_color"].value_counts(dropna=True)
-
 white_ct = int(color_counts.get("White", 0))
 blue_ct = int(color_counts.get("Blue", 0))
 pink_ct = int(color_counts.get("Pink", 0))
@@ -217,24 +212,27 @@ with c4:
     st.metric(label=t("seats_pink", lang), value=f"{pink_ct}")
 
 # ------------------------------------------------------------------------------
-# Roster Table
+# Roster Table (20 rows, scroll, frozen header, no index)
 # ------------------------------------------------------------------------------
 st.subheader(t("section_roster", lang))
 
 table_df = df.copy()
-# Translate seat color for display only
+
+# Human-friendly display values
 if "expected_transfer_seat_color" in table_df.columns:
     table_df["expected_transfer_seat_color"] = table_df["expected_transfer_seat_color"].map(SEAT_COLOR.get(lang, {})).fillna(table_df["expected_transfer_seat_color"])
-# Convert and format updated_at to CET
+
 if "updated_at" in table_df.columns:
     table_df["updated_at"] = pd.to_datetime(table_df["updated_at"], utc=True, errors="coerce")
     table_df["updated_at"] = table_df["updated_at"].dt.tz_convert("Europe/Berlin").dt.strftime("%d.%m.%Y %H%M")
-# Ensure numeric for formatting and gradient
+
 for col in ["total_hero_power", "combat_power_1st_squad"]:
     if col in table_df.columns:
-        table_df[col] = pd.to_numeric(table_df[col], errors="coerce")
+        table_df[col] = pd.to_numeric(table_df[col], errors="coerce").apply(
+            lambda v: f"{v/1_000_000:.2f} M" if pd.notnull(v) else ""
+        )
 
-# Column header mapping
+# Column headers translation
 display_cols_map = {
     "player_name": t("col_player_name", lang),
     "current_alliance": t("col_current_alliance", lang),
@@ -243,44 +241,25 @@ display_cols_map = {
     "expected_transfer_seat_color": t("col_seat_color", lang),
     "updated_at": t("col_updated_at", lang),
 }
-ordered_cols = [c for c in display_cols_map.keys() if c in table_df.columns]
+display_df = table_df.rename(columns=display_cols_map)
 
-# Styled table with gentle gradient if matplotlib is installed
-try:
-    import matplotlib  # noqa: F401
-    styled = (
-        table_df[ordered_cols]
-        .style
-        .background_gradient(subset=["total_hero_power"], cmap="Greens")
-        .format({
-            "total_hero_power": lambda v: f"{float(v)/1_000_000:.2f} M" if pd.notnull(v) else "",
-            "combat_power_1st_squad": lambda v: f"{float(v)/1_000_000:.2f} M" if pd.notnull(v) else "",
-        })
-        .hide(axis="index")
-    )
-    table_df_renamed = table_df.rename(columns=display_cols_map)
-    styled = (
-        table_df_renamed[[display_cols_map[c] for c in ordered_cols]]
-        .style
-        .background_gradient(subset=[display_cols_map["total_hero_power"]], cmap="Greens")
-        .format({
-            display_cols_map["total_hero_power"]: lambda v: f"{float(v)/1_000_000:.2f} M" if pd.notnull(v) else "",
-            display_cols_map["combat_power_1st_squad"]: lambda v: f"{float(v)/1_000_000:.2f} M" if pd.notnull(v) else "",
-        })
-        .hide(axis="index")
-    )
-    st.write(styled)
-except Exception:
-    tmp = table_df.copy()
-    for col in ["total_hero_power", "combat_power_1st_squad"]:
-        if col in tmp.columns:
-            tmp[col] = tmp[col].apply(lambda v: f"{float(v)/1_000_000:.2f} M" if pd.notnull(v) else "")
-    tmp = tmp.rename(columns=display_cols_map)
-    st.dataframe(tmp, use_container_width=True)
+# Approximate row height and total height for 20 visible rows
+row_height_px = 36
+visible_rows = 20
+header_px = 40
+height_px = header_px + row_height_px * visible_rows
+
+st.dataframe(display_df, hide_index=True, height=height_px, use_container_width=True)
 
 # CSV of the visible table (use renamed headers; keep formatted numbers)
-csv = table_df.rename(columns=display_cols_map).to_csv(index=False).encode("utf-8")
-st.download_button(label=t("download_csv", lang), data=csv, file_name="players_filtered.csv", mime="text/csv", key="download_csv_btn")
+csv = display_df.to_csv(index=False).encode("utf-8")
+st.download_button(
+    label=t("download_csv", lang),
+    data=csv,
+    file_name="players_filtered.csv",
+    mime="text/csv",
+    key="download_csv_btn",
+)
 
 # ------------------------------------------------------------------------------
 # Admin Tools – Sidebar expander
