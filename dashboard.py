@@ -156,8 +156,12 @@ def fetch_players() -> pd.DataFrame:
 # ------------------------------------------------------------------------------
 # UI – main
 # ------------------------------------------------------------------------------
-st.title(t("title", lang))
-st.sidebar.header(t("filter_panel", lang))
+st.title("🐱 " + t("title", lang))
+# Top KPI cards
+kpi1, kpi2, kpi3 = st.columns(3)
+
+# Fetch raw first so KPIs use numerics
+st.sidebar.header("🧭 " + t("filter_panel", lang))
 
 # Filters
 alliance_like = st.sidebar.text_input(t("filter_alliance", lang))
@@ -168,8 +172,19 @@ sort_key = st.sidebar.selectbox(t("sort_by", lang), options=[k for k, _ in SORT_
 ascending = st.sidebar.checkbox(t("ascending", lang), value=False)
 
 df = fetch_players()
+
 total_records = len(df)
 
+# KPIs from raw (not filtered yet)
+if not df.empty:
+    total_power_sum = pd.to_numeric(df.get("total_hero_power"), errors="coerce").fillna(0).sum()
+    avg_power = pd.to_numeric(df.get("total_hero_power"), errors="coerce").fillna(0).mean()
+    alliance_combat = pd.to_numeric(df.get("combat_power_1st_squad"), errors="coerce").fillna(0).sum()
+    kpi1.metric(label=t("col_total_power", lang), value=f"{total_power_sum/1_000_000:.2f} M")
+    kpi2.metric(label="Avg Hero Power", value=f"{avg_power/1_000_000:.2f} M")
+    kpi3.metric(label="Alliance Combat Score", value=f"{alliance_combat/1_000_000:.2f} M")
+
+# Apply filters for the table/charts
 if not df.empty:
     if alliance_like.strip():
         df = df[df["current_alliance"].str.contains(alliance_like, case=False, na=False)]
@@ -182,40 +197,130 @@ else:
 
 # ------------------------------------------------------------------------------
 # ------------------------------------------------------------------------------
-# Table display
+# Main content: Table (left) and Charts (right)
 # ------------------------------------------------------------------------------
-_df = df.copy()
-# Seat color translate for display only
-if "expected_transfer_seat_color" in _df.columns:
-    _df["expected_transfer_seat_color"] = _df["expected_transfer_seat_color"].map(SEAT_COLOR.get(lang, {})).fillna(_df["expected_transfer_seat_color"])
+left, right = st.columns([7,5])
 
-# Format big numbers as XX.XX M for display only
-for col in ["total_hero_power", "combat_power_1st_squad"]:
-    if col in _df.columns:
-        _df[col] = pd.to_numeric(_df[col], errors="coerce")
-        _df[col] = _df[col].apply(lambda v: (f"{v/1_000_000:.2f} M" if pd.notnull(v) else ""))
+with left:
+    st.subheader("Alliance Member Roster")
+    # Build styled table from filtered df
+    table_df = df.copy()
+    # Translate seat color for display only
+    if "expected_transfer_seat_color" in table_df.columns:
+        table_df["expected_transfer_seat_color"] = table_df["expected_transfer_seat_color"].map(SEAT_COLOR.get(lang, {})).fillna(table_df["expected_transfer_seat_color"])
+    # Ensure datetime conversion
+    if "updated_at" in table_df.columns and pd.api.types.is_datetime64_any_dtype(table_df["updated_at"]):
+        table_df["updated_at"] = table_df["updated_at"].dt.tz_convert("Europe/Berlin").dt.strftime("%d.%m.%Y %H%M")
+    else:
+        # attempt parse then format
+        if "updated_at" in table_df.columns:
+            table_df["updated_at"] = pd.to_datetime(table_df["updated_at"], utc=True, errors="coerce").dt.tz_convert("Europe/Berlin").dt.strftime("%d.%m.%Y %H%M")
 
-# Updated at: convert to Europe/Berlin and format dd.mm.yyyy HHMM for display
-if "updated_at" in _df.columns and pd.api.types.is_datetime64_any_dtype(_df["updated_at"]):
-    _df["updated_at"] = (
-        _df["updated_at"].dt.tz_convert("Europe/Berlin").dt.strftime("%d.%m.%Y %H%M")
+    # Numeric formatting for display
+    for col in ["total_hero_power", "combat_power_1st_squad"]:
+        if col in table_df.columns:
+            table_df[col] = pd.to_numeric(table_df[col], errors="coerce")
+
+    # Create a Styler for gradient on total_hero_power
+    display_cols_map = {
+        "player_name": t("col_player_name", lang),
+        "current_alliance": t("col_current_alliance", lang),
+        "total_hero_power": t("col_total_power", lang),
+        "combat_power_1st_squad": t("col_1st_squad", lang),
+        "expected_transfer_seat_color": t("col_seat_color", lang),
+        "updated_at": t("col_updated_at", lang),
+    }
+    ordered_cols = [c for c in display_cols_map.keys() if c in table_df.columns]
+
+    styled = (
+        table_df[ordered_cols]
+        .style
+        .background_gradient(subset=["total_hero_power"], cmap="Greens")
+        .format({
+            "total_hero_power": lambda v: f"{float(v)/1_000_000:.2f} M" if pd.notnull(v) else "",
+            "combat_power_1st_squad": lambda v: f"{float(v)/1_000_000:.2f} M" if pd.notnull(v) else "",
+        })
+        .set_table_styles([
+            {"selector": "th", "props": [("text-align", "left")]},
+            {"selector": "td", "props": [("text-align", "left")]},
+        ])
+        .hide(axis="index")
     )
+    styled = styled.set_table_attributes('class="dataframe"')
+    # Rename headers for display
+    styled = styled.set_table_styles([], overwrite=False)
+    table_df_renamed = table_df.rename(columns=display_cols_map)
+    # Rebuild styled with renamed headers
+    styled = (
+        table_df_renamed[[display_cols_map[c] for c in ordered_cols]]
+        .style
+        .background_gradient(subset=[display_cols_map["total_hero_power"]], cmap="Greens")
+        .format({
+            display_cols_map["total_hero_power"]: lambda v: f"{float(v)/1_000_000:.2f} M" if pd.notnull(v) else "",
+            display_cols_map["combat_power_1st_squad"]: lambda v: f"{float(v)/1_000_000:.2f} M" if pd.notnull(v) else "",
+        })
+        .hide(axis="index")
+    )
+    st.write(styled)
 
-cols_map = {
-    "player_name": t("col_player_name", lang),
-    "current_alliance": t("col_current_alliance", lang),
-    "total_hero_power": t("col_total_power", lang),
-    "combat_power_1st_squad": t("col_1st_squad", lang),
-    "expected_transfer_seat_color": t("col_seat_color", lang),
-    "updated_at": t("col_updated_at", lang),
-}
+    # CSV download (use formatted copy but keep numbers as-is by exporting original filtered df)
+    csv = table_df.rename(columns=display_cols_map).to_csv(index=False).encode("utf-8")
+    st.download_button(label=t("download_csv", lang), data=csv, file_name="players_filtered.csv", mime="text/csv", key="download_csv_btn")
 
-_df = _df.rename(columns=cols_map)
+with right:
+    # Charts
+    import altair as alt
+    st.subheader("Visuals")
 
-st.caption(t("showing", lang).format(n=len(_df), total=total_records))
-st.dataframe(_df[[c for c in cols_map.values() if c in _df.columns]], use_container_width=True)
+    # Top 5 Players by Power
+    if not df.empty and "player_name" in df.columns and "total_hero_power" in df.columns:
+        top5 = df[["player_name", "total_hero_power"]].copy()
+        top5["total_hero_power"] = pd.to_numeric(top5["total_hero_power"], errors="coerce")
+        top5 = top5.dropna().nlargest(5, "total_hero_power")
+        bar = alt.Chart(top5).mark_bar().encode(
+            x=alt.X("player_name:N", sort='-y', title="Player"),
+            y=alt.Y("total_hero_power:Q", title="Power"),
+            tooltip=["player_name", alt.Tooltip("total_hero_power:Q", format=",")]
+        ).properties(title="Top 5 Players by Power", height=250)
+        st.altair_chart(bar, use_container_width=True)
 
-# CSV download
+    # Seat Color Distribution pie
+    if not df.empty and "expected_transfer_seat_color" in df.columns:
+        seat_counts = df["expected_transfer_seat_color"].map(SEAT_COLOR.get(lang, {})).value_counts().reset_index()
+        seat_counts.columns = ["seat", "count"]
+        pie = alt.Chart(seat_counts).mark_arc().encode(
+            theta=alt.Theta(field="count", type="quantitative"),
+            color=alt.Color(field="seat", type="nominal"),
+            tooltip=["seat", "count"]
+        ).properties(title="Seat Color Distribution", height=250)
+        st.altair_chart(pie, use_container_width=True)
+
+# ------------------------------------------------------------------------------
+# Admin Tools – move into sidebar expander
+# ------------------------------------------------------------------------------
+with st.sidebar.expander("🔒 Admin Tools", expanded=False):
+    players_for_select: List[Dict] = df[["player_name"]].to_dict("records") if not df.empty else []
+    if players_for_select:
+        players_for_select = sorted(players_for_select, key=lambda r: (r["player_name"] or "").lower())
+        names = [r["player_name"] for r in players_for_select]
+        idx = st.selectbox(t("select_player", lang), options=range(len(names)), format_func=lambda i: names[i])
+        pin1 = st.text_input(t("new_pin", lang))
+        pin2 = st.text_input(t("confirm_pin", lang))
+        if st.button(t("reset_pin", lang)):
+            if pin1 != pin2:
+                st.error(t("error_pin_match", lang))
+            elif not pin1.isdigit() or not (4 <= len(pin1) <= 6):
+                st.error(t("error_pin_range", lang))
+            else:
+                player_name = players_for_select[idx]["player_name"]
+                try:
+                    sb.table("players").update({"edit_pin": pin1}).eq("player_name", player_name).execute()
+                    st.success(t("success_reset", lang).format(name=player_name))
+                except Exception as e:
+                    st.error("PIN update failed. Check RLS or column name.")
+                    st.exception(e)
+    else:
+        st.info(t("error_no_player", lang))
 csv = _df.to_csv(index=False).encode("utf-8")
 st.download_button(label=t("download_csv", lang), data=csv, file_name="players_filtered.csv", mime="text/csv", key="download_csv_btn")
 
