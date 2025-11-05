@@ -1,9 +1,12 @@
 # public_form.py
 import os
+import json
 from datetime import datetime
 import streamlit as st
 from supabase import create_client
 from i18n import t, LANGS  # your i18n.py
+
+from streamlit.components.v1 import html as comp_html  # for browser language sniff
 
 # ---------------------------------------------------------------------
 # Page config (collapsed sidebar is nicer on phones)
@@ -36,26 +39,22 @@ def now_iso() -> str:
 
 def try_update_with_pin(table_payload: dict, player_name: str, pin_value: str):
     """
-    Prefer new column 'edit_pin'. If it doesn't exist on this table, fall back to legacy 'edit_code'.
+    Prefer new column 'edit_pin'. If it doesn't exist, fall back to legacy 'edit_code'.
     """
-    # Attempt with edit_pin
     try:
         sb.table("players").update(table_payload).eq("player_name", player_name).eq("edit_pin", pin_value).execute()
         return True
     except Exception as e1:
         msg = str(e1)
-        if "column edit_pin" in msg or "edit_pin" in msg and "does not exist" in msg:
-            # fall back to edit_code
+        if ("edit_pin" in msg and "does not exist" in msg) or ("column edit_pin" in msg):
             sb.table("players").update(table_payload).eq("player_name", player_name).eq("edit_code", pin_value).execute()
             return True
-        # re-raise if it's not a column-name issue
         raise
 
 def try_insert_with_pin(table_payload: dict, pin_value: str):
     """
     Prefer new column 'edit_pin'. Fall back to legacy 'edit_code' if needed.
     """
-    # First try with edit_pin
     payload = dict(table_payload)
     payload["edit_pin"] = pin_value
     try:
@@ -63,8 +62,7 @@ def try_insert_with_pin(table_payload: dict, pin_value: str):
         return True
     except Exception as e1:
         msg = str(e1)
-        if "column edit_pin" in msg or "edit_pin" in msg and "does not exist" in msg:
-            # try with edit_code instead
+        if ("edit_pin" in msg and "does not exist" in msg) or ("column edit_pin" in msg):
             payload = dict(table_payload)
             payload["edit_code"] = pin_value
             sb.table("players").insert(payload).execute()
@@ -72,30 +70,71 @@ def try_insert_with_pin(table_payload: dict, pin_value: str):
         raise
 
 # ---------------------------------------------------------------------
+# Browser language auto-detect via URL param (?lang=xx)
+# ---------------------------------------------------------------------
+def ensure_lang_query_param():
+    # Read query params
+    try:
+        params = st.experimental_get_query_params()
+    except Exception:
+        params = {}
+    supported = list(LANGS.keys())
+
+    # If no lang in URL, sniff from browser and set it once
+    if "lang" not in params:
+        comp_html(f"""
+        <script>
+          const supported = {json.dumps(supported)};
+          const url = new URL(window.location.href);
+          if (!url.searchParams.get('lang')) {{
+            const nav = (navigator.languages && navigator.languages.length ? navigator.languages[0] : navigator.language) || 'en';
+            const code = (nav || 'en').slice(0,2).toLowerCase();
+            const pick = supported.includes(code) ? code : 'en';
+            url.searchParams.set('lang', pick);
+            window.location.replace(url.toString());  // one-time redirect to set ?lang
+          }}
+        </script>
+        """, height=0)
+        st.stop()  # wait for reload after setting ?lang
+
+    # If lang present, validate; else fall back to 'en'
+    raw = params.get("lang", ["en"])
+    chosen = raw[0] if isinstance(raw, list) else raw
+    if chosen not in supported:
+        chosen = "en"
+        try:
+            st.experimental_set_query_params(lang=chosen)
+        except Exception:
+            pass
+    return chosen
+
+default_lang = ensure_lang_query_param()
+
+# ---------------------------------------------------------------------
 # Language picker + title + note
 # ---------------------------------------------------------------------
 lang = st.selectbox(
     "🌍 Choose your language / Wählen Sie Ihre Sprache",
     options=list(LANGS.keys()),
-    index=list(LANGS.keys()).index("en") if "en" in LANGS else 0,
+    index=list(LANGS.keys()).index(default_lang),
     format_func=lambda k: k
 )
-t.set_lang(lang)
+# Keep URL in sync with selection so it persists on refresh
+try:
+    st.experimental_set_query_params(lang=lang)
+except Exception:
+    pass
 
+t.set_lang(lang)
 st.title(t("title"))
-# Localized note under the title
-st.info(t("seat_note"))
+st.info(t("seat_note"))  # localized note under the title
 
 # Optional: Mobile layout toggle (compact styles, full-width button)
 mobile = st.toggle("Mobile layout", value=False, help="Optimized layout for phones")
-
 if mobile:
     st.markdown("""
     <style>
-      /* tighter inputs and labels on phones */
-      .stTextInput input, .stNumberInput input, .stSelectbox select {
-        font-size: 0.95rem;
-      }
+      .stTextInput input, .stNumberInput input, .stSelectbox select { font-size: 0.95rem; }
       .stButton > button { width: 100%; }
     </style>
     """, unsafe_allow_html=True)
@@ -111,7 +150,7 @@ with st.form("player_form", clear_on_submit=False):
     total_power = st.number_input(f"{t('total_power')} ({t('whole_hint')})", min_value=0, step=1)
     combat_power = st.number_input(f"{t('combat_power')} ({t('whole_hint')})", min_value=0, step=1)
 
-    # Seat color: blank by default, optional (we only send if a value is chosen)
+    # Seat color: blank by default, optional
     seat_options_with_blank = [""] + SEAT_OPTIONS
     seat_color = st.selectbox(
         t("seat_color"),
@@ -146,7 +185,6 @@ if submitted:
                 if not valid_pin(pin_update):
                     st.warning("Please enter a valid 4–6 digit PIN to update.")
                 else:
-                    # Build update payload — only include seat color if chosen
                     payload = {
                         "player_name": player_name.strip(),
                         "current_alliance": alliance.strip(),
@@ -180,10 +218,8 @@ if submitted:
 
         except Exception as e:
             msg = str(e)
-            # Friendly duplicate-name message (unique constraint violation)
             if "duplicate key value" in msg or "23505" in msg:
                 st.warning("That player name already exists — switch to Update mode and enter your PIN.")
-            # RLS or wrong PIN typically shows as permission/row security errors
             elif "violates row-level security" in msg or "permission denied" in msg or "42501" in msg:
                 st.warning("Update blocked. Wrong PIN or player not found.")
             else:
