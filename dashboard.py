@@ -54,7 +54,7 @@ UI = {
         "reset_pin": "Reset PIN",
         "pin_note": "PINs are not displayed here for security; resetting will overwrite the previous PIN immediately.",
         # column headers
-        "col_player_name": "player_name",
+        "col_player_name": "Player Name",
         "col_current_alliance": "Current Alliance",
         "col_total_power": "Total Hero Power",
         "col_1st_squad": "Combat Power (1st Squad)",
@@ -74,6 +74,7 @@ UI = {
         "error_pin_match": "PINs do not match.",
         "error_pin_range": "PIN must be 4 to 6 digits.",
         "success_reset": "PIN reset for {name}.",
+        "section_roster": "Roster",
     },
     "de": {
         "title": "Immer Miau – Dashboard",
@@ -90,7 +91,7 @@ UI = {
         "confirm_pin": "Neue PIN bestätigen",
         "reset_pin": "PIN zurücksetzen",
         "pin_note": "PINs werden hier aus Sicherheitsgründen nicht angezeigt; das Zurücksetzen überschreibt die vorherige PIN sofort.",
-        "col_player_name": "player_name",
+        "col_player_name": "Spielername",
         "col_current_alliance": "Aktuelle Allianz",
         "col_total_power": "Gesamte Heldenstärke",
         "col_1st_squad": "Kampfkraft (1. Trupp)",
@@ -107,6 +108,7 @@ UI = {
         "error_pin_match": "PINs stimmen nicht überein.",
         "error_pin_range": "PIN muss 4 bis 6 Ziffern haben.",
         "success_reset": "PIN für {name} zurückgesetzt.",
+        "section_roster": "Mitgliederliste",
     },
 }
 
@@ -207,7 +209,7 @@ else:
 left, right = st.columns([7, 5])
 
 with left:
-    st.subheader("Alliance Member Roster")
+    st.subheader(t("section_roster", lang))
     table_df = df.copy()
     # Translate seat color for display only
     if "expected_transfer_seat_color" in table_df.columns:
