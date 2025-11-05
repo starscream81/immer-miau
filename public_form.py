@@ -7,9 +7,13 @@ from i18n import t, LANGS
 
 st.set_page_config(page_title="Immer Miau — Submit", page_icon="🐾", layout="centered")
 
-# Supabase (public anon key only for this app)
-SUPABASE_URL = os.environ["SUPABASE_URL"]
-SUPABASE_ANON_KEY = os.environ["SUPABASE_ANON_KEY"]
+# Read from environment or Streamlit Secrets (no keys in code)
+SUPABASE_URL = os.getenv("SUPABASE_URL") or st.secrets.get("SUPABASE_URL")
+SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY") or st.secrets.get("SUPABASE_ANON_KEY")
+if not SUPABASE_URL or not SUPABASE_ANON_KEY:
+    st.error("Missing Supabase configuration. Add SUPABASE_URL and SUPABASE_ANON_KEY in Settings → Secrets.")
+    st.stop()
+
 sb = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
 
 SEAT_OPTIONS = ["White", "Blue", "Pink"]
