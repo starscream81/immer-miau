@@ -8,6 +8,7 @@ Features:
 - CSV download for the filtered view
 - Admin tool: reset a player's PIN (by player_name) with validation
 - Supabase read/write (players table assumed)
+- Display: "Updated At" shown in Central European Time, formatted dd.mm.yyyy HHMM
 """
 
 import io
@@ -115,6 +116,7 @@ def t(key: str, lang: str) -> str:
 # ------------------------------------------------------------------------------
 # Language selector
 # ------------------------------------------------------------------------------
+
 def lang_selector() -> str:
     default = st.session_state.get("lang", "de")
     lang = st.sidebar.selectbox(
@@ -141,7 +143,11 @@ def fetch_players() -> pd.DataFrame:
             .limit(1000)
             .execute()
         )
-        return pd.DataFrame(res.data or [])
+        df = pd.DataFrame(res.data or [])
+        # Ensure updated_at is timezone-aware datetime (UTC) then convert to Europe/Berlin for display
+        if "updated_at" in df.columns:
+            df["updated_at"] = pd.to_datetime(df["updated_at"], utc=True, errors="coerce")
+        return df
     except Exception as e:
         st.error("Fetch failed (likely GRANTS/RLS/columns).")
         st.exception(e)
@@ -178,8 +184,15 @@ else:
 # Table display
 # ------------------------------------------------------------------------------
 _df = df.copy()
+# Seat color translate for display only
 if "expected_transfer_seat_color" in _df.columns:
     _df["expected_transfer_seat_color"] = _df["expected_transfer_seat_color"].map(SEAT_COLOR.get(lang, {})).fillna(_df["expected_transfer_seat_color"])
+
+# Updated at: convert to Europe/Berlin and format dd.mm.yyyy HHMM for display
+if "updated_at" in _df.columns and pd.api.types.is_datetime64_any_dtype(_df["updated_at"]):
+    _df["updated_at"] = (
+        _df["updated_at"].dt.tz_convert("Europe/Berlin").dt.strftime("%d.%m.%Y %H%M")
+    )
 
 cols_map = {
     "player_name": t("col_player_name", lang),
@@ -191,6 +204,7 @@ cols_map = {
 }
 
 _df = _df.rename(columns=cols_map)
+
 st.caption(t("showing", lang).format(n=len(_df), total=total_records))
 st.dataframe(_df[[c for c in cols_map.values() if c in _df.columns]], use_container_width=True)
 
