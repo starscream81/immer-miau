@@ -6,173 +6,151 @@ import streamlit as st
 from supabase import create_client
 from i18n import t, LANGS
 
-st.set_page_config(page_title="Immer Miau — Private Dashboard", page_icon="😼", layout="wide")
+# ──────────────────────────────────────────────────────────────────────────────
+# App config
+# ──────────────────────────────────────────────────────────────────────────────
+st.set_page_config(page_title="Immer Miau – Dashboard", page_icon="📊", layout="wide")
 
-# ---- Supabase (read from env or Streamlit Secrets; no keys in code) ----
-SUPABASE_URL = os.getenv("SUPABASE_URL") or st.secrets.get("SUPABASE_URL")
-SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or st.secrets.get("SUPABASE_SERVICE_ROLE_KEY")
-if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
-    st.error("Missing Supabase configuration. Add SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in Settings → Secrets.")
-    st.stop()
+# Supabase (service role key so editors can update safely)
+SUPABASE_URL = os.environ["SUPABASE_URL"]
+SUPABASE_SERVICE_ROLE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
 sb = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
-# ---- Constants ----
 SEAT_OPTIONS = ["White", "Blue", "Pink"]
-TABLE = "players"
 
-def fmt_m(n):
-    try:
-        n = float(n)
-        return f"{n/1_000_000:.1f}M"
-    except:
-        return "—"
-
-# ---- Language selector (matches i18n.py) ----
-if "lang" not in st.session_state:
-    st.session_state.lang = "en"
-lang = st.sidebar.selectbox(
-    "🌐 Language",
-    options=list(LANGS.keys()),
-    index=list(LANGS.keys()).index(st.session_state.lang) if st.session_state.lang in LANGS else 0
-)
-st.session_state.lang = lang
+# Language
+lang = st.sidebar.selectbox("🌍 Language", options=list(LANGS.keys()), index=list(LANGS.keys()).index("en"))
 t.set_lang(lang)
 
-st.title(t("title"))  # reuse the title key from i18n
+st.title("Immer Miau – Admin Dashboard")
 
-# ---- Data helpers ----
-@st.cache_data(ttl=30)
-def load_df() -> pd.DataFrame:
-    data = sb.table(TABLE).select("*").order("player_name").execute().data or []
-    df = pd.DataFrame(data)
-    if df.empty:
-        df = pd.DataFrame(columns=[
-            "player_name",
-            "current_alliance",
-            "total_hero_power",
-            "combat_power_1st_squad",
-            "expected_transfer_seat_color",
-            "created_at",
-            "updated_at",
-            "submitted_ip",
+# ──────────────────────────────────────────────────────────────────────────────
+# Helpers
+# ──────────────────────────────────────────────────────────────────────────────
+def fetch_players() -> pd.DataFrame:
+    """Pull all rows from players into a DataFrame."""
+    try:
+        res = sb.table("players").select("*").execute()
+        rows = res.data or []
+    except Exception as e:
+        st.error(f"Failed to load data: {e}")
+        rows = []
+    if not rows:
+        return pd.DataFrame(columns=[
+            "player_name", "current_alliance", "total_hero_power",
+            "combat_power_1st_squad", "expected_transfer_seat_color",
+            "edit_code", "created_at", "updated_at"
         ])
+    df = pd.DataFrame(rows)
+    # Ensure expected columns exist
+    for col in ["player_name", "current_alliance", "total_hero_power",
+                "combat_power_1st_squad", "expected_transfer_seat_color",
+                "edit_code", "created_at", "updated_at"]:
+        if col not in df.columns:
+            df[col] = None
+    # Nice types
+    for col in ["total_hero_power", "combat_power_1st_squad"]:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+    # Sort newest first by updated_at if present
+    if "updated_at" in df.columns:
+        df["updated_at"] = pd.to_datetime(df["updated_at"], errors="coerce")
+        df = df.sort_values("updated_at", ascending=False)
     return df
 
-def upsert_row(row: dict):
-    row["updated_at"] = datetime.utcnow().isoformat()
-    sb.table(TABLE).upsert(row, on_conflict="player_name").execute()
+def numeric(n):
+    try:
+        return int(n)
+    except Exception:
+        return n
 
-def delete_row(name: str):
-    sb.table(TABLE).delete().eq("player_name", name).execute()
+# ──────────────────────────────────────────────────────────────────────────────
+# Sidebar: Filters & Sort
+# ──────────────────────────────────────────────────────────────────────────────
+st.sidebar.subheader(t("filters"))
 
-df = load_df()
+alliance_query = st.sidebar.text_input(t("filter_alliance"))
+seat_filter = st.sidebar.multiselect(t("filter_seat"), SEAT_OPTIONS, default=SEAT_OPTIONS)
 
-# ---- FILTERS + SORT (in sidebar) ----
-st.sidebar.header("Filters & Sort")
-
-alliance_query = st.sidebar.text_input("Filter by Current Alliance (contains)")
-seat_filter = st.sidebar.multiselect("Seat Color", SEAT_OPTIONS, default=SEAT_OPTIONS)
-
-# Programmatic sort (table also supports click-to-sort)
 SORT_FIELDS = {
     "Player Name": "player_name",
-    "Current Alliance": "current_alliance",
+    "Alliance": "current_alliance",
     "Total Hero Power": "total_hero_power",
     "Combat Power 1st Squad": "combat_power_1st_squad",
     "Seat Color": "expected_transfer_seat_color",
     "Last Updated": "updated_at",
 }
-sort_field_label = st.sidebar.selectbox("Sort by", list(SORT_FIELDS.keys()), index=0)
-sort_field = SORT_FIELDS[sort_field_label]
-sort_ascending = st.sidebar.checkbox("Sort ascending", value=True)
+sort_field_label = st.sidebar.selectbox(t("sort_by"), list(SORT_FIELDS.keys()), index=5 if "Last Updated" in SORT_FIELDS else 0)
+sort_col = SORT_FIELDS[sort_field_label]
+sort_ascending = st.sidebar.checkbox(t("sort_asc"), value=False)
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Data view
+# ──────────────────────────────────────────────────────────────────────────────
+df = fetch_players()
 
 # Apply filters
-df_filtered = df.copy()
+df_view = df.copy()
 if alliance_query:
-    df_filtered = df_filtered[df_filtered["current_alliance"].fillna("").str.contains(alliance_query, case=False, na=False)]
+    df_view = df_view[df_view["current_alliance"].fillna("").str.contains(alliance_query, case=False, na=False)]
 if seat_filter:
-    df_filtered = df_filtered[df_filtered["expected_transfer_seat_color"].isin(seat_filter)]
+    df_view = df_view[df_view["expected_transfer_seat_color"].isin(seat_filter)]
 
-# Ensure numeric types for proper sorting and metrics
-for col in ["total_hero_power", "combat_power_1st_squad"]:
-    df_filtered[col] = pd.to_numeric(df_filtered[col], errors="coerce")
+# Sort
+if sort_col in df_view.columns:
+    df_view = df_view.sort_values(sort_col, ascending=sort_ascending, kind="mergesort")
 
-# Apply programmatic sort
-df_filtered = df_filtered.sort_values(by=sort_field, ascending=sort_ascending, na_position="last")
+st.caption(f"Showing {len(df_view)} of {len(df)} records")
 
-# ---- Summary ----
-c1, c2, c3 = st.columns(3)
-with c1:
-    st.metric("Players", len(df_filtered))
-with c2:
-    try:
-        st.metric(t("total_power"), round(pd.to_numeric(df_filtered["total_hero_power"], errors="coerce").mean()))
-    except:
-        st.metric(t("total_power"), "—")
-with c3:
-    st.metric("Last Updated", (df_filtered["updated_at"].max() if not df_filtered.empty else "—"))
+# Hide sensitive PIN from the main grid
+columns_to_show = [
+    "player_name", "current_alliance", "total_hero_power",
+    "combat_power_1st_squad", "expected_transfer_seat_color", "updated_at"
+]
+present_cols = [c for c in columns_to_show if c in df_view.columns]
 
-# ---- Table (pretty M columns) ----
-if not df_filtered.empty:
-    df_display = df_filtered.copy()
-    df_display["Total Hero Power (M)"] = df_display["total_hero_power"].apply(fmt_m)
-    df_display["Combat Power 1st Squad (M)"] = df_display["combat_power_1st_squad"].apply(fmt_m)
-    show_cols = [
-        "player_name",
-        "current_alliance",
-        "Total Hero Power (M)",
-        "Combat Power 1st Squad (M)",
-        "expected_transfer_seat_color",
-        "updated_at",
-    ]
-    st.subheader("Roster")
-    st.dataframe(df_display[show_cols], use_container_width=True, hide_index=True)
-else:
-    st.info("No matching rows. Try clearing filters.")
+st.dataframe(df_view[present_cols], use_container_width=True)
 
-# ---- Add / Update / Delete ----
-st.subheader(t("add_or_edit") if "add_or_edit" in LANGS.get(lang, {}) else "Add or Edit")
+# Export filtered CSV
+csv = df_view[present_cols].to_csv(index=False).encode("utf-8")
+st.download_button(label=t("download_csv"), data=csv, file_name="immer-miau-filtered.csv", mime="text/csv")
 
-with st.form("edit_form", clear_on_submit=False):
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        player_name = st.text_input(t("player_name"))
-        current_alliance = st.text_input(t("current_alliance"))
-        seat_color = st.selectbox("Expected Transfer Seat Color", SEAT_OPTIONS)
-    with c2:
-        total_power = st.number_input(t("total_power"), min_value=0, step=1, help=t("total_power"))
-        st.caption(f"Preview: {fmt_m(total_power)}")
-    with c3:
-        combat_power = st.number_input(t("combat_power"), min_value=0, step=1, help=t("combat_power"))
-        st.caption(f"Preview: {fmt_m(combat_power)}")
-        mode = st.radio("Mode", ["Add/Update", "Delete"], horizontal=True)
+st.markdown("---")
 
-    apply_btn = st.form_submit_button("Apply")
+# ──────────────────────────────────────────────────────────────────────────────
+# Admin tools: Reset a player's PIN (edit_code)
+# ──────────────────────────────────────────────────────────────────────────────
+st.subheader("Admin tools: Reset Player PIN")
 
-if apply_btn:
-    if not player_name.strip():
-        st.warning(t("warning"))
-    else:
-        if mode == "Delete":
-            delete_row(player_name.strip())
-            st.success(f"Deleted {player_name}")
+def _valid_pin(pin: str) -> bool:
+    return pin.isdigit() and 4 <= len(pin) <= 6
+
+with st.form("reset_pin_form", clear_on_submit=False):
+    # Choose player
+    name_options = sorted(df["player_name"].dropna().unique().tolist())
+    player_to_reset = st.selectbox("Select Player", options=name_options)
+    new_pin = st.text_input("New PIN (4–6 digits)", type="password", max_chars=6, help="Digits only. Example: 1234")
+    confirm_pin = st.text_input("Confirm New PIN", type="password", max_chars=6)
+
+    submitted = st.form_submit_button("Reset PIN")
+    if submitted:
+        if not player_to_reset:
+            st.warning("Please select a player.")
+        elif not new_pin or not confirm_pin:
+            st.warning("Please enter and confirm the new PIN.")
+        elif new_pin != confirm_pin:
+            st.warning("PINs do not match.")
+        elif not _valid_pin(new_pin):
+            st.warning("PIN must be 4–6 digits (numbers only).")
         else:
-            upsert_row({
-                "player_name": player_name.strip(),
-                "current_alliance": (current_alliance or "").strip() or None,
-                "total_hero_power": int(total_power) if total_power is not None else None,
-                "combat_power_1st_squad": int(combat_power) if combat_power is not None else None,
-                "expected_transfer_seat_color": seat_color,
-            })
-            st.success(f"Saved {player_name}")
-        st.cache_data.clear()
-        st.experimental_rerun()
+            try:
+                # Service role key bypasses RLS; we can update directly
+                sb.table("players").update({
+                    "edit_code": new_pin,
+                    "updated_at": datetime.utcnow().isoformat(),
+                }).eq("player_name", player_to_reset).execute()
+                st.success(f"✅ PIN reset for **{player_to_reset}**.")
+            except Exception as e:
+                st.error(f"Failed to reset PIN: {e}")
 
-# ---- Export ----
-st.subheader("Export")
-st.download_button(
-    "Download CSV (filtered)",
-    data=df_filtered.to_csv(index=False),
-    file_name="immer_miau_roster_filtered.csv",
-    mime="text/csv",
-)
+st.markdown("PINs are not displayed here for security; resetting will overwrite the previous PIN immediately.")
