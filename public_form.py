@@ -175,3 +175,35 @@ if submitted:
                 st.warning("Update blocked. Wrong PIN or player not found.")
             else:
                 st.error(f"{t('error')} {msg}")
+
+# ---------------------------------------------------------------------
+# Buy Me a Beer button
+# ---------------------------------------------------------------------
+st.markdown(
+    """
+    ---
+    <style>
+      .beer-button {
+        background-color: #f5c518;
+        color: black;
+        border: none;
+        padding: 10px 24px;
+        border-radius: 8px;
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background-color 0.3s ease;
+        text-decoration: none;
+      }
+      .beer-button:hover {
+        background-color: #ffd84d;
+      }
+    </style>
+    <div style='text-align: center; margin-top: 1.5em;'>
+      <a class='beer-button' href='https://paypal.me/KMahana' target='_blank'>
+        🍺 Buy Me a Beer
+      </a>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
