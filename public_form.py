@@ -89,4 +89,12 @@ with st.form("player_form"):
                         st.success("✅ Submission successful! Keep your PIN — you’ll need it to edit.")
                         st.info("🔐 Your PIN is the number you just chose. If you forget it, ask an editor to reset it.")
             except Exception as e:
-                st.error(f"{t('error')}: {e}")
+                msg = str(e)
+                # Friendly duplicate-name message (unique constraint violation)
+                if "duplicate key value" in msg or "23505" in msg:
+                    st.warning("That player name already exists — please use Update mode and enter your PIN.")
+                # PIN mismatch during update typically surfaces as an RLS violation
+                elif "violates row-level security" in msg or "42501" in msg:
+                    st.warning("Update blocked. The PIN is incorrect or the player name was not found.")
+                else:
+                    st.error(f"{t('error')}: {msg}")
