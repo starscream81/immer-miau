@@ -18,8 +18,8 @@ LANGS = {
         "title": "Immer Miau Player Form",
         "player_name": "Player Name",
         "current_alliance": "Current Alliance",
-        "total_power": "Total Hero Power (Enter whole number)",
-        "combat_power": "Combat Power 1st Squad (Enter whole number)",
+        "total_power": "Total Hero Power",
+        "combat_power": "Combat Power 1st Squad",
         "seat_color": "Expected Transfer Seat Color",
         "submit": "Submit",
         "success": "✅ Submission successful! Thank you for adding your info.",
@@ -33,14 +33,17 @@ LANGS = {
         "add_or_edit": "Add or Edit",
         "apply": "Apply",
         "export": "Export",
-        "download_csv": "Download CSV (filtered)"
+        "download_csv": "Download CSV (filtered)",
+        # NEW
+        "seat_note": "If you've already transferred, please leave Expected Transfer Seat Color blank.",
+        "whole_hint": "Enter whole number, not xx.xx M",
     },
     "de": {
         "title": "Immer Miau Spielerformular",
         "player_name": "Spielername",
         "current_alliance": "Aktuelle Allianz",
-        "total_power": "Gesamte Heldenstärke (Ganze Zahl eingeben)",
-        "combat_power": "Kampfkraft 1. Trupp (Ganze Zahl eingeben)",
+        "total_power": "Gesamte Heldenstärke",
+        "combat_power": "Kampfkraft 1. Trupp",
         "seat_color": "Erwartete Transfersitzfarbe",
         "submit": "Senden",
         "success": "✅ Erfolgreich gesendet! Danke für deine Eingabe.",
@@ -54,14 +57,17 @@ LANGS = {
         "add_or_edit": "Hinzufügen oder Bearbeiten",
         "apply": "Anwenden",
         "export": "Exportieren",
-        "download_csv": "CSV herunterladen (gefiltert)"
+        "download_csv": "CSV herunterladen (gefiltert)",
+        # NEW
+        "seat_note": "Wenn du bereits transferiert hast, lasse Erwartete Sitzfarbe beim Transfer leer.",
+        "whole_hint": "Ganze Zahl eingeben, nicht xx.xx M",
     },
     "es": {
         "title": "Formulario de Jugador Immer Miau",
         "player_name": "Nombre del jugador",
         "current_alliance": "Alianza actual",
-        "total_power": "Poder total de héroe (Ingrese número entero)",
-        "combat_power": "Poder de combate del 1er escuadrón (Ingrese número entero)",
+        "total_power": "Poder total de héroe",
+        "combat_power": "Poder de combate del 1er escuadrón",
         "seat_color": "Color de asiento de transferencia esperado",
         "submit": "Enviar",
         "success": "✅ Envío exitoso. ¡Gracias por agregar tu información!",
@@ -75,14 +81,17 @@ LANGS = {
         "add_or_edit": "Agregar o Editar",
         "apply": "Aplicar",
         "export": "Exportar",
-        "download_csv": "Descargar CSV (filtrado)"
+        "download_csv": "Descargar CSV (filtrado)",
+        # NEW
+        "seat_note": "Si ya te has transferido, deja en blanco el campo de Color de asiento de transferencia previsto.",
+        "whole_hint": "Ingrese número entero, no xx.xx M",
     },
     "pt": {
         "title": "Formulário de Jogador Immer Miau",
         "player_name": "Nome do jogador",
         "current_alliance": "Aliança atual",
-        "total_power": "Poder total do herói (Insira número inteiro)",
-        "combat_power": "Poder de combate do 1º esquadrão (Insira número inteiro)",
+        "total_power": "Poder total do herói",
+        "combat_power": "Poder de combate do 1º esquadrão",
         "seat_color": "Cor esperada do assento de transferência",
         "submit": "Enviar",
         "success": "✅ Envio bem-sucedido! Obrigado por adicionar suas informações.",
@@ -96,14 +105,17 @@ LANGS = {
         "add_or_edit": "Adicionar ou Editar",
         "apply": "Aplicar",
         "export": "Exportar",
-        "download_csv": "Baixar CSV (filtrado)"
+        "download_csv": "Baixar CSV (filtrado)",
+        # NEW
+        "seat_note": "Se você já foi transferido, deixe em branco a Cor esperada do assento de transferência.",
+        "whole_hint": "Insira número inteiro, não xx.xx M",
     },
     "ja": {
         "title": "Immer Miau プレイヤーフォーム",
         "player_name": "プレイヤー名",
         "current_alliance": "現在の同盟",
-        "total_power": "総ヒーローパワー（整数を入力）",
-        "combat_power": "第1部隊の戦闘力（整数を入力）",
+        "total_power": "総ヒーローパワー",
+        "combat_power": "第1部隊の戦闘力",
         "seat_color": "予想される移籍座席の色",
         "submit": "送信",
         "success": "✅ 送信成功！ご協力ありがとうございます。",
@@ -117,14 +129,17 @@ LANGS = {
         "add_or_edit": "追加または編集",
         "apply": "適用",
         "export": "エクスポート",
-        "download_csv": "CSVをダウンロード（フィルター済み）"
+        "download_csv": "CSVをダウンロード（フィルター済み）",
+        # NEW
+        "seat_note": "すでに移籍済みの場合は、予想される移籍座席の色は空欄のままにしてください。",
+        "whole_hint": "xx.xx M ではなく、整数を入力してください",
     },
     "it": {
         "title": "Modulo Giocatore Immer Miau",
         "player_name": "Nome del Giocatore",
         "current_alliance": "Alleanza Attuale",
-        "total_power": "Potere Totale Eroe (Inserisci numero intero)",
-        "combat_power": "Potere di Combattimento 1ª Squadra (Inserisci numero intero)",
+        "total_power": "Potere Totale Eroe",
+        "combat_power": "Potere di Combattimento 1ª Squadra",
         "seat_color": "Colore Posto Trasferimento Previsto",
         "submit": "Invia",
         "success": "✅ Inviato con successo! Grazie per aver aggiunto le tue informazioni.",
@@ -138,14 +153,17 @@ LANGS = {
         "add_or_edit": "Aggiungi o Modifica",
         "apply": "Applica",
         "export": "Esporta",
-        "download_csv": "Scarica CSV (filtrato)"
+        "download_csv": "Scarica CSV (filtrato)",
+        # NEW
+        "seat_note": "Se ti sei già trasferito, lascia vuoto il campo Colore Posto Trasferimento Previsto.",
+        "whole_hint": "Inserisci un numero intero, non xx.xx M",
     },
     "ar": {
         "title": "نموذج لاعب إيمر مياو",
         "player_name": "اسم اللاعب",
         "current_alliance": "التحالف الحالي",
-        "total_power": "قوة البطل الإجمالية (أدخل رقمًا صحيحًا)",
-        "combat_power": "قوة القتال للفريق الأول (أدخل رقمًا صحيحًا)",
+        "total_power": "قوة البطل الإجمالية",
+        "combat_power": "قوة القتال للفريق الأول",
         "seat_color": "لون المقعد المتوقع",
         "submit": "إرسال",
         "success": "✅ تم الإرسال بنجاح! شكرًا لإضافة معلوماتك.",
@@ -159,14 +177,17 @@ LANGS = {
         "add_or_edit": "إضافة أو تعديل",
         "apply": "تطبيق",
         "export": "تصدير",
-        "download_csv": "تنزيل CSV (بعد التصفية)"
+        "download_csv": "تنزيل CSV (بعد التصفية)",
+        # NEW
+        "seat_note": "إذا كنت قد انتقلت بالفعل، فالرجاء ترك حقل لون المقعد المتوقع فارغًا.",
+        "whole_hint": "أدخل رقمًا صحيحًا، وليس xx.xx M",
     },
     "fr": {
         "title": "Formulaire Joueur Immer Miau",
         "player_name": "Nom du Joueur",
         "current_alliance": "Alliance Actuelle",
-        "total_power": "Puissance Totale du Héros (Entrez un nombre entier)",
-        "combat_power": "Puissance de Combat 1er Escadron (Entrez un nombre entier)",
+        "total_power": "Puissance Totale du Héros",
+        "combat_power": "Puissance de Combat 1er Escadron",
         "seat_color": "Couleur de Siège de Transfert Prévue",
         "submit": "Soumettre",
         "success": "✅ Soumission réussie ! Merci d’avoir ajouté vos informations.",
@@ -180,14 +201,17 @@ LANGS = {
         "add_or_edit": "Ajouter ou Modifier",
         "apply": "Appliquer",
         "export": "Exporter",
-        "download_csv": "Télécharger le CSV (filtré)"
+        "download_csv": "Télécharger le CSV (filtré)",
+        # NEW
+        "seat_note": "Si vous avez déjà été transféré, laissez vide la couleur de siège de transfert prévue.",
+        "whole_hint": "Entrez un nombre entier, pas xx.xx M",
     },
     "sk": {
         "title": "Formulár Hráča Immer Miau",
         "player_name": "Meno Hráča",
         "current_alliance": "Aktuálna Aliancia",
-        "total_power": "Celková Sila Hrdinu (Zadajte celé číslo)",
-        "combat_power": "Bojová Sila 1. Tímu (Zadajte celé číslo)",
+        "total_power": "Celková Sila Hrdinu",
+        "combat_power": "Bojová Sila 1. Tímu",
         "seat_color": "Očakávaná Farba Miesta Prenosu",
         "submit": "Odoslať",
         "success": "✅ Odoslanie bolo úspešné! Ďakujeme za pridané informácie.",
@@ -201,6 +225,9 @@ LANGS = {
         "add_or_edit": "Pridať alebo Upraviť",
         "apply": "Použiť",
         "export": "Exportovať",
-        "download_csv": "Stiahnuť CSV (filtrované)"
+        "download_csv": "Stiahnuť CSV (filtrované)",
+        # NEW
+        "seat_note": "Ak ste sa už presunuli, nechajte pole Očakávaná farba miesta prázdne.",
+        "whole_hint": "Zadajte celé číslo, nie xx.xx M",
     }
 }
