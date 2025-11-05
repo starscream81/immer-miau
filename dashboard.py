@@ -1,19 +1,17 @@
 """
-Immer Miau — Dashboard (Streamlit) — Fix B (use player_name instead of id)
---------------------------------------------------------------------------
-Features:
-- Language toggle (English, Deutsch) for all UI text and column headers
-- Keeps player_name values EXACTLY as stored (never translated)
-- Filters: alliance contains, seat color chips, sort by column, ascending toggle
-- CSV download for the filtered view
-- Admin tool: reset a player's PIN (by player_name) with validation
-- Supabase read/write (players table assumed)
-- Display: "Updated At" shown in Central European Time, formatted dd.mm.yyyy HHMM
+Immer Miau — Dashboard (Streamlit) — KPIs + Charts + CET + Fix B
+-----------------------------------------------------------------
+- Language toggle (English/Deutsch)
+- KPIs across the top
+- Styled roster table with green gradient and XX.XX M formatting
+- CET time display (dd.mm.yyyy HHMM)
+- Right-side charts (Top 5 bar, Seat Color pie)
+- Admin Tools in sidebar expander
+- Updates by player_name (no id)
 """
 
 import io
 import os
-from datetime import datetime
 from typing import Dict, List
 import pandas as pd
 import streamlit as st
@@ -22,7 +20,7 @@ from supabase import create_client, Client
 # ------------------------------------------------------------------------------
 # Config
 # ------------------------------------------------------------------------------
-st.set_page_config(page_title="Immer Miau — Dashboard", page_icon="🛠️", layout="wide")
+st.set_page_config(page_title="Immer Miau — Dashboard", page_icon="🐱", layout="wide")
 
 SUPABASE_URL = os.getenv("SUPABASE_URL", st.secrets.get("SUPABASE_URL", ""))
 SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", st.secrets.get("SUPABASE_ANON_KEY", ""))
@@ -36,14 +34,13 @@ def get_client() -> Client:
 sb = get_client()
 
 # ------------------------------------------------------------------------------
-# i18n (translations)
+# i18n
 # ------------------------------------------------------------------------------
 LANGS: Dict[str, str] = {"en": "English", "de": "Deutsch"}
-
 UI = {
     "en": {
         "title": "Immer Miau — Dashboard",
-        "filter_panel": "Filter & Sorting",
+        "filter_panel": "Filters & Sorting",
         "filter_alliance": "Filter by current alliance (contains)",
         "seat_color": "Seat color",
         "sort_by": "Sort by",
@@ -57,17 +54,20 @@ UI = {
         "reset_pin": "Reset PIN",
         "pin_note": "PINs are not displayed here for security; resetting will overwrite the previous PIN immediately.",
         # column headers
-        "col_player_name": "player_name",  # never translate
+        "col_player_name": "player_name",
         "col_current_alliance": "Current Alliance",
         "col_total_power": "Total Hero Power",
         "col_1st_squad": "Combat Power (1st Squad)",
         "col_seat_color": "Expected Transfer Seat Color",
         "col_updated_at": "Updated At",
+        # KPI titles
+        "kpi_avg_power": "Avg Hero Power",
+        "kpi_alliance_combat": "Alliance Combat Score",
         # misc
-        "success_reset": "PIN reset for {name}.",
+        "error_no_player": "No players found.",
         "error_pin_match": "PINs do not match.",
         "error_pin_range": "PIN must be 4 to 6 digits.",
-        "error_no_player": "No players found.",
+        "success_reset": "PIN reset for {name}.",
     },
     "de": {
         "title": "Immer Miau – Dashboard",
@@ -84,18 +84,18 @@ UI = {
         "confirm_pin": "Neue PIN bestätigen",
         "reset_pin": "PIN zurücksetzen",
         "pin_note": "PINs werden hier aus Sicherheitsgründen nicht angezeigt; das Zurücksetzen überschreibt die vorherige PIN sofort.",
-        # column headers
-        "col_player_name": "player_name",  # do not translate
+        "col_player_name": "player_name",
         "col_current_alliance": "Aktuelle Allianz",
         "col_total_power": "Gesamte Heldenstärke",
         "col_1st_squad": "Kampfkraft (1. Trupp)",
         "col_seat_color": "Erwartete Sitzfarbe beim Transfer",
         "col_updated_at": "Zuletzt aktualisiert",
-        # misc
-        "success_reset": "PIN für {name} zurückgesetzt.",
+        "kpi_avg_power": "Durchschn. Heldenstärke",
+        "kpi_alliance_combat": "Allianz-Kampfscore",
+        "error_no_player": "Keine Spieler gefunden.",
         "error_pin_match": "PINs stimmen nicht überein.",
         "error_pin_range": "PIN muss 4 bis 6 Ziffern haben.",
-        "error_no_player": "Keine Spieler gefunden.",
+        "success_reset": "PIN für {name} zurückgesetzt.",
     },
 }
 
@@ -144,7 +144,6 @@ def fetch_players() -> pd.DataFrame:
             .execute()
         )
         df = pd.DataFrame(res.data or [])
-        # Ensure updated_at is timezone-aware datetime (UTC) then convert to Europe/Berlin for display
         if "updated_at" in df.columns:
             df["updated_at"] = pd.to_datetime(df["updated_at"], utc=True, errors="coerce")
         return df
@@ -154,13 +153,11 @@ def fetch_players() -> pd.DataFrame:
         return pd.DataFrame()
 
 # ------------------------------------------------------------------------------
-# UI – main
+# Header + KPIs
 # ------------------------------------------------------------------------------
 st.title("🐱 " + t("title", lang))
-# Top KPI cards
-kpi1, kpi2, kpi3 = st.columns(3)
 
-# Fetch raw first so KPIs use numerics
+kpi1, kpi2, kpi3 = st.columns(3)
 st.sidebar.header("🧭 " + t("filter_panel", lang))
 
 # Filters
@@ -174,17 +171,15 @@ ascending = st.sidebar.checkbox(t("ascending", lang), value=False)
 df = fetch_players()
 
 total_records = len(df)
-
-# KPIs from raw (not filtered yet)
 if not df.empty:
     total_power_sum = pd.to_numeric(df.get("total_hero_power"), errors="coerce").fillna(0).sum()
     avg_power = pd.to_numeric(df.get("total_hero_power"), errors="coerce").fillna(0).mean()
     alliance_combat = pd.to_numeric(df.get("combat_power_1st_squad"), errors="coerce").fillna(0).sum()
     kpi1.metric(label=t("col_total_power", lang), value=f"{total_power_sum/1_000_000:.2f} M")
-    kpi2.metric(label="Avg Hero Power", value=f"{avg_power/1_000_000:.2f} M")
-    kpi3.metric(label="Alliance Combat Score", value=f"{alliance_combat/1_000_000:.2f} M")
+    kpi2.metric(label=t("kpi_avg_power", lang), value=f"{avg_power/1_000_000:.2f} M")
+    kpi3.metric(label=t("kpi_alliance_combat", lang), value=f"{alliance_combat/1_000_000:.2f} M")
 
-# Apply filters for the table/charts
+# Apply filters
 if not df.empty:
     if alliance_like.strip():
         df = df[df["current_alliance"].str.contains(alliance_like, case=False, na=False)]
@@ -196,32 +191,26 @@ else:
     st.info(t("error_no_player", lang))
 
 # ------------------------------------------------------------------------------
-# ------------------------------------------------------------------------------
 # Main content: Table (left) and Charts (right)
 # ------------------------------------------------------------------------------
-left, right = st.columns([7,5])
+left, right = st.columns([7, 5])
 
 with left:
     st.subheader("Alliance Member Roster")
-    # Build styled table from filtered df
     table_df = df.copy()
     # Translate seat color for display only
     if "expected_transfer_seat_color" in table_df.columns:
         table_df["expected_transfer_seat_color"] = table_df["expected_transfer_seat_color"].map(SEAT_COLOR.get(lang, {})).fillna(table_df["expected_transfer_seat_color"])
-    # Ensure datetime conversion
-    if "updated_at" in table_df.columns and pd.api.types.is_datetime64_any_dtype(table_df["updated_at"]):
+    # Convert and format updated_at to CET
+    if "updated_at" in table_df.columns:
+        table_df["updated_at"] = pd.to_datetime(table_df["updated_at"], utc=True, errors="coerce")
         table_df["updated_at"] = table_df["updated_at"].dt.tz_convert("Europe/Berlin").dt.strftime("%d.%m.%Y %H%M")
-    else:
-        # attempt parse then format
-        if "updated_at" in table_df.columns:
-            table_df["updated_at"] = pd.to_datetime(table_df["updated_at"], utc=True, errors="coerce").dt.tz_convert("Europe/Berlin").dt.strftime("%d.%m.%Y %H%M")
-
-    # Numeric formatting for display
+    # Ensure numeric for formatting and gradient
     for col in ["total_hero_power", "combat_power_1st_squad"]:
         if col in table_df.columns:
             table_df[col] = pd.to_numeric(table_df[col], errors="coerce")
 
-    # Create a Styler for gradient on total_hero_power
+    # Column header mapping
     display_cols_map = {
         "player_name": t("col_player_name", lang),
         "current_alliance": t("col_current_alliance", lang),
@@ -232,48 +221,50 @@ with left:
     }
     ordered_cols = [c for c in display_cols_map.keys() if c in table_df.columns]
 
-    styled = (
-        table_df[ordered_cols]
-        .style
-        .background_gradient(subset=["total_hero_power"], cmap="Greens")
-        .format({
-            "total_hero_power": lambda v: f"{float(v)/1_000_000:.2f} M" if pd.notnull(v) else "",
-            "combat_power_1st_squad": lambda v: f"{float(v)/1_000_000:.2f} M" if pd.notnull(v) else "",
-        })
-        .set_table_styles([
-            {"selector": "th", "props": [("text-align", "left")]},
-            {"selector": "td", "props": [("text-align", "left")]},
-        ])
-        .hide(axis="index")
-    )
-    styled = styled.set_table_attributes('class="dataframe"')
-    # Rename headers for display
-    styled = styled.set_table_styles([], overwrite=False)
-    table_df_renamed = table_df.rename(columns=display_cols_map)
-    # Rebuild styled with renamed headers
-    styled = (
-        table_df_renamed[[display_cols_map[c] for c in ordered_cols]]
-        .style
-        .background_gradient(subset=[display_cols_map["total_hero_power"]], cmap="Greens")
-        .format({
-            display_cols_map["total_hero_power"]: lambda v: f"{float(v)/1_000_000:.2f} M" if pd.notnull(v) else "",
-            display_cols_map["combat_power_1st_squad"]: lambda v: f"{float(v)/1_000_000:.2f} M" if pd.notnull(v) else "",
-        })
-        .hide(axis="index")
-    )
-    st.write(styled)
+    # Build styled table with gradient (requires matplotlib); fall back to st.dataframe if not available
+    try:
+        import matplotlib  # noqa: F401
+        styled = (
+            table_df[ordered_cols]
+            .style
+            .background_gradient(subset=["total_hero_power"], cmap="Greens")
+            .format({
+                "total_hero_power": lambda v: f"{float(v)/1_000_000:.2f} M" if pd.notnull(v) else "",
+                "combat_power_1st_squad": lambda v: f"{float(v)/1_000_000:.2f} M" if pd.notnull(v) else "",
+            })
+            .hide(axis="index")
+        )
+        # Rename headers by rebuilding with renamed columns
+        table_df_renamed = table_df.rename(columns=display_cols_map)
+        styled = (
+            table_df_renamed[[display_cols_map[c] for c in ordered_cols]]
+            .style
+            .background_gradient(subset=[display_cols_map["total_hero_power"]], cmap="Greens")
+            .format({
+                display_cols_map["total_hero_power"]: lambda v: f"{float(v)/1_000_000:.2f} M" if pd.notnull(v) else "",
+                display_cols_map["combat_power_1st_squad"]: lambda v: f"{float(v)/1_000_000:.2f} M" if pd.notnull(v) else "",
+            })
+            .hide(axis="index")
+        )
+        st.write(styled)
+    except Exception:
+        # Fallback plain dataframe with formatted numbers
+        tmp = table_df.copy()
+        for col in ["total_hero_power", "combat_power_1st_squad"]:
+            if col in tmp.columns:
+                tmp[col] = tmp[col].apply(lambda v: f"{float(v)/1_000_000:.2f} M" if pd.notnull(v) else "")
+        tmp = tmp.rename(columns=display_cols_map)
+        st.dataframe(tmp, use_container_width=True)
 
-    # CSV download (use formatted copy but keep numbers as-is by exporting original filtered df)
+    # CSV of the visible table (use renamed headers; keep formatted numbers)
     csv = table_df.rename(columns=display_cols_map).to_csv(index=False).encode("utf-8")
     st.download_button(label=t("download_csv", lang), data=csv, file_name="players_filtered.csv", mime="text/csv", key="download_csv_btn")
 
 with right:
-    # Charts
     import altair as alt
     st.subheader("Visuals")
 
-    # Top 5 Players by Power
-    if not df.empty and "player_name" in df.columns and "total_hero_power" in df.columns:
+    if not df.empty and {"player_name", "total_hero_power"}.issubset(df.columns):
         top5 = df[["player_name", "total_hero_power"]].copy()
         top5["total_hero_power"] = pd.to_numeric(top5["total_hero_power"], errors="coerce")
         top5 = top5.dropna().nlargest(5, "total_hero_power")
@@ -284,7 +275,6 @@ with right:
         ).properties(title="Top 5 Players by Power", height=250)
         st.altair_chart(bar, use_container_width=True)
 
-    # Seat Color Distribution pie
     if not df.empty and "expected_transfer_seat_color" in df.columns:
         seat_counts = df["expected_transfer_seat_color"].map(SEAT_COLOR.get(lang, {})).value_counts().reset_index()
         seat_counts.columns = ["seat", "count"]
@@ -296,7 +286,7 @@ with right:
         st.altair_chart(pie, use_container_width=True)
 
 # ------------------------------------------------------------------------------
-# Admin Tools – move into sidebar expander
+# Admin Tools – Sidebar expander
 # ------------------------------------------------------------------------------
 with st.sidebar.expander("🔒 Admin Tools", expanded=False):
     players_for_select: List[Dict] = df[["player_name"]].to_dict("records") if not df.empty else []
@@ -321,45 +311,5 @@ with st.sidebar.expander("🔒 Admin Tools", expanded=False):
                     st.exception(e)
     else:
         st.info(t("error_no_player", lang))
-csv = _df.to_csv(index=False).encode("utf-8")
-st.download_button(label=t("download_csv", lang), data=csv, file_name="players_filtered.csv", mime="text/csv", key="download_csv_btn")
-
-# ------------------------------------------------------------------------------
-# Admin Tools – Reset PIN
-# ------------------------------------------------------------------------------
-csv = _df.to_csv(index=False).encode("utf-8")
-st.download_button(label=t("download_csv", lang), data=csv, file_name="players_filtered.csv", mime="text/csv")
-
-# ------------------------------------------------------------------------------
-# Admin Tools – Reset PIN
-# ------------------------------------------------------------------------------
-st.markdown("---")
-st.subheader(t("admin_tools", lang))
-
-players_for_select: List[Dict] = df[["player_name"]].to_dict("records") if not df.empty else []
-
-if players_for_select:
-    players_for_select = sorted(players_for_select, key=lambda r: (r["player_name"] or "").lower())
-    names = [r["player_name"] for r in players_for_select]
-    idx = st.selectbox(t("select_player", lang), options=range(len(names)), format_func=lambda i: names[i])
-
-    pin1 = st.text_input(t("new_pin", lang))
-    pin2 = st.text_input(t("confirm_pin", lang))
-
-    if st.button(t("reset_pin", lang)):
-        if pin1 != pin2:
-            st.error(t("error_pin_match", lang))
-        elif not pin1.isdigit() or not (4 <= len(pin1) <= 6):
-            st.error(t("error_pin_range", lang))
-        else:
-            player_name = players_for_select[idx]["player_name"]
-            try:
-                sb.table("players").update({"edit_pin": pin1}).eq("player_name", player_name).execute()
-                st.success(t("success_reset", lang).format(name=player_name))
-            except Exception as e:
-                st.error("PIN update failed. Check RLS or column name.")
-                st.exception(e)
-else:
-    st.info(t("error_no_player", lang))
 
 st.caption(t("pin_note", lang))
