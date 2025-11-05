@@ -22,7 +22,7 @@ SEAT_OPTIONS = ["White", "Blue", "Pink"]
 
 # Language selector
 lang = st.selectbox("🌍 Choose your language / Wählen Sie Ihre Sprache", options=list(LANGS.keys()))
-st.set_lang(lang)
+t.set_lang(lang)
 
 st.title(t("title"))
 
