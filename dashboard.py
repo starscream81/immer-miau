@@ -1,12 +1,13 @@
 """
-Immer Miau — Dashboard (Streamlit) — Roster + Seats Summary + CET + Fix B
---------------------------------------------------------------------------
+Immer Miau — Dashboard (Streamlit) — Roster + Seats Summary + CET + Fix B + Mobile
+-----------------------------------------------------------------------------------
 - Language toggle (English/Deutsch)
 - Seats summary above the roster (total + counts by seat color from the filtered table)
-- Roster table shows 20 rows with scroll, frozen headers, and no index column
+- Roster table: 20 rows desktop, 10 rows mobile; scroll; frozen headers; no index
 - XX.XX M number formatting, CET time display (dd.mm.yyyy HHMM)
 - Admin Tools in sidebar expander
 - Updates by player_name (no id)
+- Mobile layout toggle + compact UI tweaks
 """
 
 import os
@@ -17,9 +18,14 @@ import streamlit as st
 from supabase import Client, create_client
 
 # ------------------------------------------------------------------------------
-# Config
+# Config (sidebar collapsed is nicer on phones)
 # ------------------------------------------------------------------------------
-st.set_page_config(page_title="Immer Miau — Dashboard", page_icon="🐱", layout="wide")
+st.set_page_config(
+    page_title="Immer Miau — Dashboard",
+    page_icon="🐱",
+    layout="wide",
+    initial_sidebar_state="collapsed",
+)
 
 SUPABASE_URL = os.getenv("SUPABASE_URL", st.secrets.get("SUPABASE_URL", ""))
 SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", st.secrets.get("SUPABASE_ANON_KEY", ""))
@@ -167,12 +173,22 @@ def fetch_players() -> pd.DataFrame:
 # Header
 # ------------------------------------------------------------------------------
 st.title("🐱 " + t("title", lang))
+
+# Sidebar header and mobile toggle
 st.sidebar.header("🧭 " + t("filter_panel", lang))
+mobile = st.sidebar.toggle("Mobile layout", value=False, help="Optimized layout for phones")
 
 # Filters
 alliance_like = st.sidebar.text_input(t("filter_alliance", lang))
+
 seat_opts = ["White", "Blue", "Pink"]
-seat_mult = st.sidebar.multiselect(t("seat_color", lang), options=seat_opts, default=seat_opts)
+if mobile:
+    # simpler single-select on phones
+    seat_one = st.sidebar.selectbox(t("seat_color", lang), options=["All"] + seat_opts)
+    seat_mult = seat_opts if seat_one == "All" else [seat_one]
+else:
+    seat_mult = st.sidebar.multiselect(t("seat_color", lang), options=seat_opts, default=seat_opts)
+
 sort_key_labels = {k: v[lang] for k, v in SORT_CHOICES}
 sort_key = st.sidebar.selectbox(t("sort_by", lang), options=[k for k, _ in SORT_CHOICES], format_func=lambda k: sort_key_labels[k])
 ascending = st.sidebar.checkbox(t("ascending", lang), value=False)
@@ -212,7 +228,7 @@ with c4:
     st.metric(label=t("seats_pink", lang), value=f"{pink_ct}")
 
 # ------------------------------------------------------------------------------
-# Roster Table (20 rows, scroll, frozen header, no index)
+# Roster Table (desktop 20 rows; mobile 10 rows). Frozen header, no index.
 # ------------------------------------------------------------------------------
 st.subheader(t("section_roster", lang))
 
@@ -243,9 +259,20 @@ display_cols_map = {
 }
 display_df = table_df.rename(columns=display_cols_map)
 
-# Approximate row height and total height for 20 visible rows
+# Mobile compact CSS
+if mobile:
+    st.markdown("""
+    <style>
+      .stDataFrame table { font-size: 0.9rem; }
+      .stDataFrame [data-testid="stStyledTable"] td,
+      .stDataFrame [data-testid="stStyledTable"] th { padding: 6px 8px !important; }
+      div[data-testid="stDownloadButton"] > button { width: 100%; }
+    </style>
+    """, unsafe_allow_html=True)
+
+# Visible rows and height
 row_height_px = 36
-visible_rows = 20
+visible_rows = 10 if mobile else 20
 header_px = 40
 height_px = header_px + row_height_px * visible_rows
 
@@ -259,6 +286,7 @@ st.download_button(
     file_name="players_filtered.csv",
     mime="text/csv",
     key="download_csv_btn",
+    use_container_width=True if mobile else False,
 )
 
 # ------------------------------------------------------------------------------
