@@ -5,7 +5,6 @@ import streamlit as st
 from supabase import create_client
 from i18n import t, LANGS
 
-# Page config
 st.set_page_config(
     page_title="Immer Miau – Submit",
     page_icon="🐾",
@@ -21,12 +20,15 @@ sb = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
 SEAT_OPTIONS = ["White", "Blue", "Pink"]
 
 # Language selector
-lang = st.selectbox("🌍 Choose your language / Wählen Sie Ihre Sprache", options=list(LANGS.keys()))
+lang = st.selectbox(
+    "🌍 Choose your language / Wählen Sie Ihre Sprache",
+    options=list(LANGS.keys())
+)
 t.set_lang(lang)
 
 st.title(t("title"))
 
-# Player input form
+# Player form
 with st.form("player_form"):
     player_name = st.text_input(t("player_name"))
     alliance = st.text_input(t("current_alliance"))
@@ -40,16 +42,16 @@ with st.form("player_form"):
             st.warning(t("warning"))
         else:
             data = {
-                "timestamp": datetime.utcnow().isoformat(),
                 "player_name": player_name.strip(),
                 "current_alliance": alliance.strip(),
-                "total_hero_power": total_power,
-                "combat_power_first_squad": combat_power,
-                "expected_seat_color": seat_color
+                "total_hero_power": int(total_power),
+                "combat_power_1st_squad": int(combat_power),          # Correct column name
+                "expected_transfer_seat_color": seat_color,           # Correct column name
+                "created_at": datetime.utcnow().isoformat(),
+                "updated_at": datetime.utcnow().isoformat(),
             }
-
             try:
-                sb.table("players").insert(data).execute()
+                sb.table("players").upsert(data, on_conflict="player_name").execute()
                 st.success(t("success"))
             except Exception as e:
                 st.error(f"{t('error')}: {e}")
