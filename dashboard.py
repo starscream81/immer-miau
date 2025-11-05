@@ -1,43 +1,26 @@
 """
 Immer Miau — Dashboard (Streamlit) — Fix B (use player_name instead of id)
 --------------------------------------------------------------------------
-
-What this file does
+Features:
 - Language toggle (English, Deutsch) for all UI text and column headers
 - Keeps player_name values EXACTLY as stored (never translated)
 - Filters: alliance contains, seat color chips, sort by column, ascending toggle
 - CSV download for the filtered view
 - Admin tool: reset a player's PIN (by player_name) with validation
 - Supabase read/write (players table assumed)
-
-Assumptions
-- Supabase table: public.players
-  columns: player_name text UNIQUE, current_alliance text,
-           total_hero_power int, combat_power_1st_squad int,
-           expected_transfer_seat_color text, updated_at timestamptz,
-           edit_pin text (optional)
-- RLS/policies allow the app role to select and update this table.
-
-Environment / secrets required
-  SUPABASE_URL
-  SUPABASE_ANON_KEY  (or SERVICE_ROLE for server use; anon is OK with proper RLS)
-
-Run
-  streamlit run dashboard.py
 """
 
 import io
 import os
 from datetime import datetime
 from typing import Dict, List
-
 import pandas as pd
 import streamlit as st
-from supabase import Client, create_client
+from supabase import create_client, Client
 
-# -------------
+# ------------------------------------------------------------------------------
 # Config
-# -------------
+# ------------------------------------------------------------------------------
 st.set_page_config(page_title="Immer Miau — Dashboard", page_icon="🛠️", layout="wide")
 
 SUPABASE_URL = os.getenv("SUPABASE_URL", st.secrets.get("SUPABASE_URL", ""))
@@ -51,10 +34,11 @@ def get_client() -> Client:
 
 sb = get_client()
 
-# -------------
-# i18n (only UI + headers)
-# -------------
+# ------------------------------------------------------------------------------
+# i18n (translations)
+# ------------------------------------------------------------------------------
 LANGS: Dict[str, str] = {"en": "English", "de": "Deutsch"}
+
 UI = {
     "en": {
         "title": "Immer Miau — Dashboard",
@@ -72,7 +56,7 @@ UI = {
         "reset_pin": "Reset PIN",
         "pin_note": "PINs are not displayed here for security; resetting will overwrite the previous PIN immediately.",
         # column headers
-        "col_player_name": "player_name",  # DO NOT translate this header
+        "col_player_name": "player_name",  # never translate
         "col_current_alliance": "Current Alliance",
         "col_total_power": "Total Hero Power",
         "col_1st_squad": "Combat Power (1st Squad)",
@@ -100,7 +84,7 @@ UI = {
         "reset_pin": "PIN zurücksetzen",
         "pin_note": "PINs werden hier aus Sicherheitsgründen nicht angezeigt; das Zurücksetzen überschreibt die vorherige PIN sofort.",
         # column headers
-        "col_player_name": "player_name",  # NICHT übersetzen
+        "col_player_name": "player_name",  # do not translate
         "col_current_alliance": "Aktuelle Allianz",
         "col_total_power": "Gesamte Heldenstärke",
         "col_1st_squad": "Kampfkraft (1. Trupp)",
@@ -125,13 +109,12 @@ SORT_CHOICES = [
     ("combat_power_1st_squad", {"en": "Combat Power (1st Squad)", "de": "Kampfkraft (1. Trupp)"}),
 ]
 
-
 def t(key: str, lang: str) -> str:
     return UI.get(lang, UI["en"]).get(key, key)
 
-# -------------
+# ------------------------------------------------------------------------------
 # Language selector
-# -------------
+# ------------------------------------------------------------------------------
 def lang_selector() -> str:
     default = st.session_state.get("lang", "de")
     lang = st.sidebar.selectbox(
@@ -145,9 +128,9 @@ def lang_selector() -> str:
 
 lang = lang_selector()
 
-# -------------
+# ------------------------------------------------------------------------------
 # Data access
-# -------------
+# ------------------------------------------------------------------------------
 @st.cache_data(show_spinner=False, ttl=30)
 def fetch_players() -> pd.DataFrame:
     try:
@@ -164,34 +147,21 @@ def fetch_players() -> pd.DataFrame:
         st.exception(e)
         return pd.DataFrame()
 
-# -------------
-# UI — title
-# -------------
+# ------------------------------------------------------------------------------
+# UI – main
+# ------------------------------------------------------------------------------
 st.title(t("title", lang))
-
-# -------------
-# Sidebar filters
-# -------------
 st.sidebar.header(t("filter_panel", lang))
 
+# Filters
 alliance_like = st.sidebar.text_input(t("filter_alliance", lang))
-
 seat_opts = ["White", "Blue", "Pink"]
-seat_mult = st.sidebar.multiselect(t("seat_color", lang), options=seat_opts, default=["White", "Blue", "Pink"])  # all by default
-
+seat_mult = st.sidebar.multiselect(t("seat_color", lang), options=seat_opts, default=seat_opts)
 sort_key_labels = {k: v[lang] for k, v in SORT_CHOICES}
-sort_key = st.sidebar.selectbox(
-    t("sort_by", lang),
-    options=[k for k, _ in SORT_CHOICES],
-    format_func=lambda k: sort_key_labels[k],
-)
+sort_key = st.sidebar.selectbox(t("sort_by", lang), options=[k for k, _ in SORT_CHOICES], format_func=lambda k: sort_key_labels[k])
 ascending = st.sidebar.checkbox(t("ascending", lang), value=False)
 
-# -------------
-# Load + filter data
-# -------------
 df = fetch_players()
-
 total_records = len(df)
 
 if not df.empty:
@@ -199,20 +169,17 @@ if not df.empty:
         df = df[df["current_alliance"].str.contains(alliance_like, case=False, na=False)]
     if seat_mult:
         df = df[df["expected_transfer_seat_color"].isin(seat_mult)]
-
     if sort_key in df.columns:
         df = df.sort_values(by=sort_key, ascending=ascending, kind="mergesort")
 else:
     st.info(t("error_no_player", lang))
 
-# -------------
-# Display table (translate headers and enum values, NOT player_name)
-# -------------
+# ------------------------------------------------------------------------------
+# Table display
+# ------------------------------------------------------------------------------
 _df = df.copy()
 if "expected_transfer_seat_color" in _df.columns:
-    _df["expected_transfer_seat_color"] = (
-        _df["expected_transfer_seat_color"].map(SEAT_COLOR.get(lang, {})).fillna(_df["expected_transfer_seat_color"])
-    )
+    _df["expected_transfer_seat_color"] = _df["expected_transfer_seat_color"].map(SEAT_COLOR.get(lang, {})).fillna(_df["expected_transfer_seat_color"])
 
 cols_map = {
     "player_name": t("col_player_name", lang),
@@ -224,19 +191,16 @@ cols_map = {
 }
 
 _df = _df.rename(columns=cols_map)
-
 st.caption(t("showing", lang).format(n=len(_df), total=total_records))
 st.dataframe(_df[[c for c in cols_map.values() if c in _df.columns]], use_container_width=True)
 
-# -------------
-# CSV download (filtered view)
-# -------------
+# CSV download
 csv = _df.to_csv(index=False).encode("utf-8")
 st.download_button(label=t("download_csv", lang), data=csv, file_name="players_filtered.csv", mime="text/csv")
 
-# -------------
-# Admin tools — Reset PIN (by player_name)
-# -------------
+# ------------------------------------------------------------------------------
+# Admin Tools – Reset PIN
+# ------------------------------------------------------------------------------
 st.markdown("---")
 st.subheader(t("admin_tools", lang))
 
@@ -245,7 +209,7 @@ players_for_select: List[Dict] = df[["player_name"]].to_dict("records") if not d
 if players_for_select:
     players_for_select = sorted(players_for_select, key=lambda r: (r["player_name"] or "").lower())
     names = [r["player_name"] for r in players_for_select]
-    idx = st.selectbox(t("select_player", lang), options=range(len(names)), format_func=lambda i: names[i] if i is not None else "")
+    idx = st.selectbox(t("select_player", lang), options=range(len(names)), format_func=lambda i: names[i])
 
     pin1 = st.text_input(t("new_pin", lang))
     pin2 = st.text_input(t("confirm_pin", lang))
@@ -257,8 +221,12 @@ if players_for_select:
             st.error(t("error_pin_range", lang))
         else:
             player_name = players_for_select[idx]["player_name"]
-            sb.table("players").update({"edit_pin": pin1}).eq("player_name", player_name).execute()
-            st.success(t("success_reset", lang).format(name=player_name))
+            try:
+                sb.table("players").update({"edit_pin": pin1}).eq("player_name", player_name).execute()
+                st.success(t("success_reset", lang).format(name=player_name))
+            except Exception as e:
+                st.error("PIN update failed. Check RLS or column name.")
+                st.exception(e)
 else:
     st.info(t("error_no_player", lang))
 
