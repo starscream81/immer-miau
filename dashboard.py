@@ -217,7 +217,7 @@ st.dataframe(_df[[c for c in cols_map.values() if c in _df.columns]], use_contai
 
 # CSV download
 csv = _df.to_csv(index=False).encode("utf-8")
-st.download_button(label=t("download_csv", lang), data=csv, file_name="players_filtered.csv", mime="text/csv")
+st.download_button(label=t("download_csv", lang), data=csv, file_name="players_filtered.csv", mime="text/csv", key="download_csv_btn")
 
 # ------------------------------------------------------------------------------
 # Admin Tools – Reset PIN
