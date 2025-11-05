@@ -1,22 +1,22 @@
 """
-Immer Miau — Dashboard (Streamlit)
-----------------------------------
+Immer Miau — Dashboard (Streamlit) — Fix B (use player_name instead of id)
+--------------------------------------------------------------------------
 
 What this file does
 - Language toggle (English, Deutsch) for all UI text and column headers
 - Keeps player_name values EXACTLY as stored (never translated)
 - Filters: alliance contains, seat color chips, sort by column, ascending toggle
 - CSV download for the filtered view
-- Admin tool: reset a player's PIN (with confirm field)
+- Admin tool: reset a player's PIN (by player_name) with validation
 - Supabase read/write (players table assumed)
 
 Assumptions
 - Supabase table: public.players
-  columns: id uuid, player_name text, current_alliance text,
+  columns: player_name text UNIQUE, current_alliance text,
            total_hero_power int, combat_power_1st_squad int,
            expected_transfer_seat_color text, updated_at timestamptz,
            edit_pin text (optional)
-- RLS is configured to allow the signed-in admin user to read/write.
+- RLS/policies allow the app role to select and update this table.
 
 Environment / secrets required
   SUPABASE_URL
@@ -150,19 +150,19 @@ lang = lang_selector()
 # -------------
 @st.cache_data(show_spinner=False, ttl=30)
 def fetch_players() -> pd.DataFrame:
-    res = (
-        sb.table("players")
-        .select("id, player_name, current_alliance, total_hero_power, combat_power_1st_squad, expected_transfer_seat_color, updated_at")
-        .order("updated_at", desc=True)
-        .limit(1000)
-        .execute()
-    )
-    df = pd.DataFrame(res.data or [])
-    return df
-
-
-def reset_player_pin(player_id: str, new_pin: str) -> None:
-    sb.table("players").update({"edit_pin": new_pin}).eq("id", player_id).execute()
+    try:
+        res = (
+            sb.table("players")
+            .select("player_name, current_alliance, total_hero_power, combat_power_1st_squad, expected_transfer_seat_color, updated_at")
+            .order("updated_at", desc=True)
+            .limit(1000)
+            .execute()
+        )
+        return pd.DataFrame(res.data or [])
+    except Exception as e:
+        st.error("Fetch failed (likely GRANTS/RLS/columns).")
+        st.exception(e)
+        return pd.DataFrame()
 
 # -------------
 # UI — title
@@ -195,13 +195,11 @@ df = fetch_players()
 total_records = len(df)
 
 if not df.empty:
-    # filters
     if alliance_like.strip():
         df = df[df["current_alliance"].str.contains(alliance_like, case=False, na=False)]
     if seat_mult:
         df = df[df["expected_transfer_seat_color"].isin(seat_mult)]
 
-    # sort
     if sort_key in df.columns:
         df = df.sort_values(by=sort_key, ascending=ascending, kind="mergesort")
 else:
@@ -237,12 +235,12 @@ csv = _df.to_csv(index=False).encode("utf-8")
 st.download_button(label=t("download_csv", lang), data=csv, file_name="players_filtered.csv", mime="text/csv")
 
 # -------------
-# Admin tools — Reset PIN
+# Admin tools — Reset PIN (by player_name)
 # -------------
 st.markdown("---")
 st.subheader(t("admin_tools", lang))
 
-players_for_select: List[Dict] = df[["id", "player_name"]].to_dict("records") if not df.empty else []
+players_for_select: List[Dict] = df[["player_name"]].to_dict("records") if not df.empty else []
 
 if players_for_select:
     players_for_select = sorted(players_for_select, key=lambda r: (r["player_name"] or "").lower())
@@ -258,9 +256,9 @@ if players_for_select:
         elif not pin1.isdigit() or not (4 <= len(pin1) <= 6):
             st.error(t("error_pin_range", lang))
         else:
-            player_id = players_for_select[idx]["id"]
-            reset_player_pin(player_id, pin1)
-            st.success(t("success_reset", lang).format(name=players_for_select[idx]["player_name"]))
+            player_name = players_for_select[idx]["player_name"]
+            sb.table("players").update({"edit_pin": pin1}).eq("player_name", player_name).execute()
+            st.success(t("success_reset", lang).format(name=player_name))
 else:
     st.info(t("error_no_player", lang))
 
