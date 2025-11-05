@@ -181,12 +181,19 @@ else:
     st.info(t("error_no_player", lang))
 
 # ------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # Table display
 # ------------------------------------------------------------------------------
 _df = df.copy()
 # Seat color translate for display only
 if "expected_transfer_seat_color" in _df.columns:
     _df["expected_transfer_seat_color"] = _df["expected_transfer_seat_color"].map(SEAT_COLOR.get(lang, {})).fillna(_df["expected_transfer_seat_color"])
+
+# Format big numbers as XX.XX M for display only
+for col in ["total_hero_power", "combat_power_1st_squad"]:
+    if col in _df.columns:
+        _df[col] = pd.to_numeric(_df[col], errors="coerce")
+        _df[col] = _df[col].apply(lambda v: (f"{v/1_000_000:.2f} M" if pd.notnull(v) else ""))
 
 # Updated at: convert to Europe/Berlin and format dd.mm.yyyy HHMM for display
 if "updated_at" in _df.columns and pd.api.types.is_datetime64_any_dtype(_df["updated_at"]):
@@ -209,6 +216,12 @@ st.caption(t("showing", lang).format(n=len(_df), total=total_records))
 st.dataframe(_df[[c for c in cols_map.values() if c in _df.columns]], use_container_width=True)
 
 # CSV download
+csv = _df.to_csv(index=False).encode("utf-8")
+st.download_button(label=t("download_csv", lang), data=csv, file_name="players_filtered.csv", mime="text/csv")
+
+# ------------------------------------------------------------------------------
+# Admin Tools – Reset PIN
+# ------------------------------------------------------------------------------
 csv = _df.to_csv(index=False).encode("utf-8")
 st.download_button(label=t("download_csv", lang), data=csv, file_name="players_filtered.csv", mime="text/csv")
 
