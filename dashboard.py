@@ -63,6 +63,12 @@ UI = {
         # KPI titles
         "kpi_avg_power": "Avg Hero Power",
         "kpi_alliance_combat": "Alliance Combat Score",
+        # Charts/visuals
+        "kpi_visuals": "Visuals",
+        "chart_top5_title": "Top 5 Players by Power",
+        "chart_top5_x": "Player",
+        "chart_top5_y": "Power",
+        "chart_seat_title": "Seat Color Distribution",
         # misc
         "error_no_player": "No players found.",
         "error_pin_match": "PINs do not match.",
@@ -92,6 +98,11 @@ UI = {
         "col_updated_at": "Zuletzt aktualisiert",
         "kpi_avg_power": "Durchschn. Heldenstärke",
         "kpi_alliance_combat": "Allianz-Kampfscore",
+        "kpi_visuals": "Visualisierungen",
+        "chart_top5_title": "Top 5 Spieler nach Stärke",
+        "chart_top5_x": "Spieler",
+        "chart_top5_y": "Stärke",
+        "chart_seat_title": "Sitzfarbenverteilung",
         "error_no_player": "Keine Spieler gefunden.",
         "error_pin_match": "PINs stimmen nicht überein.",
         "error_pin_range": "PIN muss 4 bis 6 Ziffern haben.",
@@ -262,17 +273,17 @@ with left:
 
 with right:
     import altair as alt
-    st.subheader("Visuals")
+    st.subheader(t("kpi_visuals", lang))
 
     if not df.empty and {"player_name", "total_hero_power"}.issubset(df.columns):
         top5 = df[["player_name", "total_hero_power"]].copy()
         top5["total_hero_power"] = pd.to_numeric(top5["total_hero_power"], errors="coerce")
         top5 = top5.dropna().nlargest(5, "total_hero_power")
         bar = alt.Chart(top5).mark_bar().encode(
-            x=alt.X("player_name:N", sort='-y', title="Player"),
-            y=alt.Y("total_hero_power:Q", title="Power"),
+            x=alt.X("player_name:N", sort='-y', title=t("chart_top5_x", lang)),
+            y=alt.Y("total_hero_power:Q", title=t("chart_top5_y", lang)),
             tooltip=["player_name", alt.Tooltip("total_hero_power:Q", format=",")]
-        ).properties(title="Top 5 Players by Power", height=250)
+        ).properties(title=t("chart_top5_title", lang), height=250)
         st.altair_chart(bar, use_container_width=True)
 
     if not df.empty and "expected_transfer_seat_color" in df.columns:
@@ -282,7 +293,7 @@ with right:
             theta=alt.Theta(field="count", type="quantitative"),
             color=alt.Color(field="seat", type="nominal"),
             tooltip=["seat", "count"]
-        ).properties(title="Seat Color Distribution", height=250)
+        ).properties(title=t("chart_seat_title", lang), height=250)
         st.altair_chart(pie, use_container_width=True)
 
 # ------------------------------------------------------------------------------
